@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-// import { SessionProvider } from "next-auth/react"; // For later
+import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -12,7 +12,7 @@ interface ProvidersProps {
 
 export default function Providers({ children }: ProvidersProps) {
   return (
-    // <SessionProvider> {/* Add back when NextAuth is configured */}
+    <SessionProvider>
       <ThemeProvider
         attribute="class"
         defaultTheme="system"
@@ -20,8 +20,8 @@ export default function Providers({ children }: ProvidersProps) {
         disableTransitionOnChange
       >
         {children}
-        <Toaster richColors position="top-right"/>
+        <Toaster richColors position="top-right" closeButton />
       </ThemeProvider>
-    // </SessionProvider>
+    </SessionProvider>
   );
 }
