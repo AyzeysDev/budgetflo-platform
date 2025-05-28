@@ -1,37 +1,32 @@
 // apps/web/src/app/page.tsx
-"use client"; // Required for useState and event handlers
+"use client"; // Still a client component for AuthModal interaction
 
 import Link from 'next/link';
 import Navbar from '@/components/common/Navbar';
 import Footer from '@/components/common/Footer';
 import { Button } from '@/components/ui/button';
-// Metadata is typically for Server Components; for a client component page,
-// you might set title/description using `useEffect` or a Head component if needed.
-// import type { Metadata } from 'next'; 
 import { TrendingUp, Target, PieChart, Bot, CheckCircle } from 'lucide-react';
-import React, { useState } from "react"; // Import useState
-import AuthModal from "@/components/auth/AuthModal"; // Import the modal
-
-// If making this a full client component, static metadata export won't work here.
-// export const metadata: Metadata = {
-//   title: 'BudgetFlo | Smart Budgeting & Expense Tracking with AI',
-//   description: 'Take control of your finances with BudgetFlo. Easy-to-use budgeting tools, expense tracking, visual dashboards, and AI-powered insights to help you achieve your financial goals.',
-// };
+import React, { useState, useEffect } from "react"; // useEffect can still be used for non-auth tasks like setting document.title
+import AuthModal from "@/components/auth/AuthModal";
+// No longer need useSession or redirect here for the primary redirection logic
 
 export default function LandingPage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const openAuthModal = () => setIsAuthModalOpen(true);
 
-  // For Client Components, set document title dynamically if needed
-  React.useEffect(() => {
+  // Set document title (this is fine in useEffect for client components)
+  useEffect(() => {
     document.title = 'BudgetFlo | Smart Budgeting & Expense Tracking with AI';
   }, []);
 
+  // The page now assumes it's only rendered for unauthenticated users
+  // because the middleware will redirect authenticated users.
   return (
-    <> {/* Use Fragment since AuthModal is sibling to the main layout */}
+    <>
       <div className="flex flex-col min-h-screen bg-background text-foreground">
-        <Navbar onGetStartedClick={openAuthModal} /> 
+        {/* Navbar will receive onGetStartedClick to open the modal */}
+        <Navbar onGetStartedClick={openAuthModal} />
         <main className="flex-grow">
           {/* Hero Section */}
           <section
@@ -45,10 +40,10 @@ export default function LandingPage() {
               <p className="text-lg md:text-xl text-muted-foreground max-w-xl md:max-w-2xl mx-auto mb-10">
                 Effortlessly set budgets, track spending, and gain AI-powered financial insights. Your journey to financial clarity starts here.
               </p>
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 className="px-8 py-3 text-lg font-semibold rounded-lg shadow-md hover:bg-primary/90 transition-all duration-300 ease-in-out transform hover:scale-105 active:scale-95"
-                onClick={openAuthModal}
+                onClick={openAuthModal} // This triggers the modal
               >
                 Get Started Free
               </Button>
@@ -79,7 +74,7 @@ export default function LandingPage() {
             </div>
           </section>
 
-        {/* How It Works Section - Updated background and card styling */}
+        {/* How It Works Section */}
         <section id="how-it-works" className="py-16 md:py-24 bg-background">
             <div className="container mx-auto px-6 sm:px-8 text-center">
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">Get Started in 3 Simple Steps</h2>
@@ -161,6 +156,7 @@ export default function LandingPage() {
         </main>
         <Footer />
       </div>
+      {/* AuthModal is still controlled by client-side state, triggered by button clicks */}
       <AuthModal isOpen={isAuthModalOpen} onOpenChange={setIsAuthModalOpen} />
     </>
   );
