@@ -2,49 +2,44 @@
 @import "tailwindcss";
 /* @import "tw-animate-css"; /* Uncomment if you install and want to use tw-animate-css */
 
-/* This custom variant was in jdmatchr-ui, keep if needed, otherwise remove */
-/* @custom-variant dark (&:is(.dark *)); */ /* This might not be needed if using .dark selector directly */
-
-/* Define CSS variables for light mode (default) */
+/* Define CSS variables for light mode (default) - REMAINS UNCHANGED */
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.13 0.028 261.692); /* Dark text for light mode */
+  --foreground: oklch(0.13 0.028 261.692);
 
-  /* BudgetFlo Primary Color: A pleasant Green */
-  --primary: oklch(0.521 0.179 155.5); /* LCH(52% 0.18 155.5) - Green */
-  --primary-foreground: oklch(0.98 0.002 155.5 / 90%); /* Very light green/white for text on primary */
+  --primary: oklch(0.521 0.179 155.5); 
+  --primary-foreground: oklch(0.98 0.002 155.5 / 90%);
   
-  --primary-light: oklch(0.92 0.05 155.5 / 80%); /* Lighter shade for backgrounds/accents */
-  --primary-dark: oklch(0.38 0.16 155.5);  /* Darker shade for hover/active */
+  --primary-light: oklch(0.92 0.05 155.5 / 80%);
+  --primary-dark: oklch(0.38 0.16 155.5);
 
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.13 0.028 261.692);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.028 261.692);
   
-  --secondary: oklch(0.967 0.003 264.542); /* Light gray */
-  --secondary-foreground: oklch(0.21 0.034 264.665); /* Darker gray for text on secondary */
+  --secondary: oklch(0.967 0.003 264.542);
+  --secondary-foreground: oklch(0.21 0.034 264.665);
   
-  --muted: oklch(0.967 0.003 264.542); /* Same as secondary for now */
-  --muted-foreground: oklch(0.551 0.027 264.364); /* Medium gray */
+  --muted: oklch(0.967 0.003 264.542);
+  --muted-foreground: oklch(0.551 0.027 264.364);
   
-  --accent: oklch(0.967 0.003 264.542); /* Can be same as secondary or a different subtle color */
+  --accent: oklch(0.967 0.003 264.542);
   --accent-foreground: oklch(0.21 0.034 264.665);
   
-  --destructive: oklch(0.577 0.245 27.325); /* Reddish */
-  --destructive-foreground: oklch(0.985 0.002 247.839); /* Light text for destructive */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.002 247.839);
 
-  --border: oklch(0.928 0.006 264.531); /* Light border */
-  --input: oklch(0.928 0.006 264.531); /* Input background (can be same as border or slightly different) */
-  --ring: var(--primary); /* Ring color matching primary */
+  --border: oklch(0.928 0.006 264.531);
+  --input: oklch(0.928 0.006 264.531);
+  --ring: var(--primary);
 
-  --radius: 0.625rem; /* from jdmatchr-ui */
+  --radius: 0.625rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Chart colors from jdmatchr-ui, can be customized for BudgetFlo */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -52,59 +47,61 @@
   --chart-5: oklch(0.769 0.188 70.08);
 }
 
-/* Define CSS variables for dark mode */
+/* Define CSS variables for dark mode - UPDATED */
 .dark {
-  --background: oklch(0.13 0.028 261.692); /* Dark background */
-  --foreground: oklch(0.985 0.002 247.839); /* Light text for dark mode */
+  --background: oklch(0.31 0.021 168); /* New dark background from image */
+  --foreground: oklch(0.95 0.005 168); /* Light text, slightly desaturated to match theme */
 
-  --primary: oklch(0.58 0.17 155.5);  /* Green for dark mode, slightly brighter/adjusted */
-  --primary-foreground: oklch(0.15 0.02 155.5 / 95%); /* Darker text on primary for dark mode if primary is light enough */
+  /* Primary color can remain green or be adjusted. Keeping current for now. */
+  --primary: oklch(0.58 0.17 155.5); 
+  --primary-foreground: oklch(0.15 0.02 155.5 / 95%); 
   
-  --primary-light: oklch(0.25 0.08 155.5 / 70%);
+  --primary-light: oklch(0.38 0.05 155.5 / 70%); /* Adjusted for new dark bg */
   --primary-dark: oklch(0.65 0.18 155.5);
 
-  --card: oklch(0.21 0.034 264.665); /* Darker card */
-  --card-foreground: oklch(0.985 0.002 247.839);
-  --popover: oklch(0.21 0.034 264.665);
-  --popover-foreground: oklch(0.985 0.002 247.839);
-
-  --secondary: oklch(0.278 0.033 256.848);
-  --secondary-foreground: oklch(0.985 0.002 247.839);
-  --muted: oklch(0.278 0.033 256.848);
-  --muted-foreground: oklch(0.707 0.022 261.325);
-  --accent: oklch(0.278 0.033 256.848);
-  --accent-foreground: oklch(0.985 0.002 247.839);
-
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0.002 247.839);
+  --card: oklch(0.35 0.022 167); /* New dark card background from image */
+  --card-foreground: oklch(0.95 0.005 168); /* Consistent light text */
   
-  --border: oklch(1 0 0 / 10%); /* Very subtle border in dark mode */
-  --input: oklch(1 0 0 / 15%);
-  --ring: var(--primary);
+  --popover: oklch(0.33 0.022 167.5); /* Slightly darker than card for popovers */
+  --popover-foreground: oklch(0.95 0.005 168);
 
-  /* Dark mode chart colors from jdmatchr-ui */
+  --secondary: oklch(0.38 0.023 167); /* Darker, slightly more saturated than card */
+  --secondary-foreground: oklch(0.95 0.005 168);
+  
+  --muted: oklch(0.38 0.023 167); /* Same as secondary for subtle backgrounds */
+  --muted-foreground: oklch(0.75 0.01 168); /* Softer light text for muted */
+  
+  --accent: oklch(0.42 0.024 166.5); /* A bit lighter for accents */
+  --accent-foreground: oklch(0.98 0.003 168);
+
+  --destructive: oklch(0.55 0.22 25); /* Adjusted destructive for better visibility on dark green */
+  --destructive-foreground: oklch(0.98 0.003 25);
+  
+  --border: oklch(0.45 0.02 168 / 50%); /* Subtle border, slightly lighter than card */
+  --input: oklch(0.40 0.022 167 / 70%); /* Input background, distinct from card */
+  --ring: var(--primary); /* Ring color matching primary, can be adjusted if needed */
+
+  /* Dark mode chart colors - can be adjusted later to fit the new theme */
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --radar-axis-text-dark: #E0E0E0; /* from jdmatchr-ui */
+  --radar-axis-text-dark: oklch(0.8 0.01 168); /* Lighter text for radar axes */
 }
 
-/* Tailwind v4 @theme block for aliasing CSS variables */
+/* Tailwind v4 @theme block for aliasing CSS variables - REMAINS UNCHANGED */
 @theme {
-  /* Base configuration options from jdmatchr-ui, adapted for BudgetFlo */
   --font-family-sans: var(--font-geist-sans);
   --font-family-mono: var(--font-geist-mono);
   --border-strategy: "1px";
 
-  /* Make Tailwind aware of your CSS variables for utilities like bg-primary, text-foreground, etc. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-primary-light: var(--primary-light); /* Custom variable for lighter primary */
-  --color-primary-dark: var(--primary-dark);   /* Custom variable for darker primary */
+  --color-primary-light: var(--primary-light);
+  --color-primary-dark: var(--primary-dark);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -128,13 +125,12 @@
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
 
-  /* Chart colors - making Tailwind aware of them */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-radar-axis-text-dark: var(--radar-axis-text-dark); /* If used by components */
+  --color-radar-axis-text-dark: var(--radar-axis-text-dark);
 }
 
 @layer base {
@@ -143,7 +139,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-family-sans); /* Explicitly set default body font */
+    font-family: var(--font-family-sans);
   }
   html {
     @apply scroll-smooth;
