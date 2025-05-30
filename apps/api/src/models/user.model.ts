@@ -1,23 +1,23 @@
 // apps/api/src/models/user.model.ts
-import { Timestamp } from 'firebase-admin/firestore'; // For Firestore Timestamp type
+import { Timestamp } from 'firebase-admin/firestore';
 
-// Interface for user data as it's stored in Firestore or passed around
 export interface UserProfile {
-  id: string; // Corresponds to NextAuth user.id (e.g., Google 'sub')
+  id: string;
   email: string;
   name?: string | null;
   image?: string | null;
-  bio?: string | null;
-  prefersDarkMode?: boolean | null;
-  createdAt: Timestamp | Date | string; // Stored as Timestamp, converted to string for API response
-  lastLoginAt: Timestamp | Date | string; // Stored as Timestamp, converted to string for API response
-  profileLastUpdatedAt?: Timestamp | Date | string; // Stored as Timestamp
-  // Add any other fields relevant to your application
-  // Example: roles?: string[];
+  bio?: string | null; // Retained for data model consistency, though not editable in current settings form
+  createdAt: Timestamp | Date | string;
+  lastLoginAt: Timestamp | Date | string;
+  profileLastUpdatedAt?: Timestamp | Date | string | null;
+
+  // New fields for persistence and features
+  dailyStreak?: number;
+  notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
+  preferredCurrency?: string; // e.g., 'USD', 'EUR'
+  displayDecimalPlaces?: 0 | 2;
 }
 
-// Interface for data received by the /sync endpoint from the BFF
-// This might be slightly different from the full UserProfile (e.g., no timestamps initially)
 export interface UserSyncPayload {
   id: string;
   email: string;
@@ -25,11 +25,13 @@ export interface UserSyncPayload {
   image?: string | null;
 }
 
-// Interface for data used to update a user's profile (subset of UserProfile)
 export interface UserProfileUpdatePayload {
   name?: string | null;
-  image?: string | null; // If you allow image updates this way
-  bio?: string | null;
-  prefersDarkMode?: boolean | null;
-  // Add other updatable fields
+  // bio is not updated from the current settings form
+  // image is not updated from the current settings form (assumed from OAuth)
+
+  // New editable preferences
+  notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
+  preferredCurrency?: string;
+  displayDecimalPlaces?: 0 | 2;
 }
