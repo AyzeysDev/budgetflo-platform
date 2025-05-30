@@ -3,9 +3,10 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { Sidebar } from '@/components/layout/Sidebar'; // Import the new Sidebar
-import { MobileHeader } from '@/components/layout/MobileHeader'; // Import the new MobileHeader
-import { Toaster } from "@/components/ui/sonner"; // Ensure Toaster is here for app-level notifications
+import { Sidebar } from '@/components/layout/Sidebar';
+import { MobileHeader } from '@/components/layout/MobileHeader';
+import { Toaster } from "@/components/ui/sonner";
+import { cn } from '@/lib/utils'; // Assuming cn is available for class merging
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -15,21 +16,35 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    const callbackUrl = encodeURIComponent(process.env.NEXTAUTH_URL_INTERNAL || process.env.NEXTAUTH_URL || "/home");
+    // The callbackBase variable was declared but not used, so it's removed.
+    // The callbackUrl is constructed directly.
+    // For simplicity, redirecting to /home as callback or just root.
+    // Middleware would be a better place for more sophisticated callback logic
+    // if the intended redirect path needs to be dynamically captured from the current request.
+    const callbackUrl = encodeURIComponent("/home"); // Or a more dynamic path if available and determined by middleware
     redirect(`/?callbackUrl=${callbackUrl}#hero-section`);
   }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-muted/30 dark:bg-background">
-      {/* New Modern Sidebar */}
       <Sidebar />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* New Modern Mobile Header */}
+      <div className="flex flex-1 flex-col overflow-hidden"> {/* This div should not scroll */}
         <MobileHeader />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 bg-background">
-          {/* Main content area for authenticated pages */}
+        {/* Key changes for scrolling:
+          - `flex-1`: Allows this main area to grow and shrink.
+          - `overflow-y-auto`: Enables vertical scrolling if content exceeds available space.
+          - `min-h-0`: Crucial for flex children that need to scroll. 
+                       It prevents the child from expanding its parent indefinitely 
+                       if its content is too large, allowing overflow-y-auto to work.
+        */}
+        <main 
+          className={cn(
+            "flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 bg-background",
+            "min-h-0" // Added this class
+          )}
+        >
           {children}
         </main>
       </div>
