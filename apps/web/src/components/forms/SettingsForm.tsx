@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+// import { Textarea } from '@/components/ui/textarea'; // Textarea removed as bio is removed
 import {
   Select,
   SelectContent,
@@ -23,7 +23,7 @@ import {
   SaveIcon, 
   User, 
   Mail, 
-  BookText, 
+  // BookText, // Icon for Bio removed
   BellRingIcon, 
   CircleDollarSignIcon, 
   SigmaIcon,
@@ -51,24 +51,27 @@ const getInitials = (name?: string | null, email?: string | null): string => {
 };
 
 const getValidCurrencyCode = (currency?: string | null): CurrencyCode | undefined => {
-  if (!currency) return undefined;
+  if (currency === null || currency === undefined) return undefined;
   return currencyCodes.includes(currency as CurrencyCode) ? currency as CurrencyCode : undefined;
 };
 
 const getValidNotificationFrequency = (frequency?: string | null): NotificationFrequency | undefined => {
-  if (!frequency) return undefined;
+  if (frequency === null || frequency === undefined) return undefined;
   return notificationFrequencies.includes(frequency as NotificationFrequency) ? frequency as NotificationFrequency : undefined;
 };
 
 const mapProfileToFormData = (profile: WebAppUserProfile): UserSettingsFormData => {
   return {
-    displayName: profile.nameToDisplay || '',
-    bio: profile.bio || '',
-    notificationFrequency: getValidNotificationFrequency(profile.notificationFrequency) || 'weekly',
-    preferredCurrency: getValidCurrencyCode(profile.preferredCurrency) || 'USD',
-    displayDecimalPlaces: profile.displayDecimalPlaces === 0 ? 0 : 2,
+    displayName: profile.nameToDisplay ?? '', 
+    // bio: profile.bio ?? '', // Bio field removed
+    notificationFrequency: getValidNotificationFrequency(profile.notificationFrequency),
+    preferredCurrency: getValidCurrencyCode(profile.preferredCurrency),
+    displayDecimalPlaces: (profile.displayDecimalPlaces === 0 || profile.displayDecimalPlaces === 2)
+                          ? profile.displayDecimalPlaces
+                          : undefined,
   };
 };
+
 
 export default function SettingsForm({ userProfile, userId }: SettingsFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,12 +85,21 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
     formState: { errors, isDirty },
   } = useForm<UserSettingsFormData>({
     resolver: zodResolver(userSettingsFormSchema),
-    defaultValues: mapProfileToFormData(userProfile),
+    defaultValues: {
+      displayName: userProfile.nameToDisplay ?? '',
+      // bio: userProfile.bio ?? '', // Bio field removed
+      notificationFrequency: getValidNotificationFrequency(userProfile.notificationFrequency) ?? 'weekly',
+      preferredCurrency: getValidCurrencyCode(userProfile.preferredCurrency) ?? 'USD',
+      displayDecimalPlaces: (userProfile.displayDecimalPlaces === 0 || userProfile.displayDecimalPlaces === 2)
+                            ? userProfile.displayDecimalPlaces
+                            : 2,
+    },
   });
 
   useEffect(() => {
     setCurrentProfile(userProfile);
-    reset(mapProfileToFormData(userProfile));
+    const formData = mapProfileToFormData(userProfile);
+    reset(formData);
   }, [userProfile, reset]);
 
   const onSubmit = async (data: UserSettingsFormData) => {
@@ -99,8 +111,8 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
     const toastId = toast.loading("Saving settings...");
 
     const payload: WebAppUserSettingsUpdatePayload = {
-      displayName: data.displayName,
-      bio: data.bio,
+      displayName: data.displayName === "" ? null : data.displayName,
+      // bio: data.bio === "" ? null : data.bio, // Bio field removed
       notificationFrequency: data.notificationFrequency,
       preferredCurrency: data.preferredCurrency,
       displayDecimalPlaces: data.displayDecimalPlaces,
@@ -120,14 +132,20 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
         throw new Error(errorData.error || 'Failed to update settings.');
       }
 
-      const updatedProfileFromServer: WebAppUserProfile = await response.json(); 
+      const apiResponse: { message: string; data: WebAppUserProfile } = await response.json(); 
+      const updatedProfileFromServer = apiResponse.data;
+      
+      if (!updatedProfileFromServer) {
+        throw new Error("Failed to retrieve updated profile data from server.");
+      }
       
       setCurrentProfile(updatedProfileFromServer); 
-      reset(mapProfileToFormData(updatedProfileFromServer)); 
+      const mappedDataForReset = mapProfileToFormData(updatedProfileFromServer);
+      reset(mappedDataForReset); 
 
       toast.success('Settings saved successfully!');
     } catch (error) {
-      toast.dismiss(toastId);
+      toast.dismiss(toastId); 
       toast.error((error as Error).message || 'An unexpected error occurred.');
       console.error("Error saving settings:", error);
     } finally {
@@ -138,9 +156,8 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
   const userInitial = getInitials(currentProfile.nameToDisplay, currentProfile.email);
 
   return (
-    // The form now wraps the header and the first row of cards
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 md:space-y-8">
-      {/* Page Header Section (rendered by the form component) */}
+      {/* Page Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
@@ -150,7 +167,7 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
             Manage your profile, preferences, and security settings.
           </p>
         </div>
-        <div className="flex gap-2 sm:ml-auto"> {/* Aligns button to the right on larger screens */}
+        <div className="flex gap-2 sm:ml-auto">
           <Button type="submit" size="lg" disabled={isSubmitting || !isDirty}>
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -206,6 +223,8 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
                 </div>
               </div>
             </div>
+            {/* Bio field removed from UI */}
+            {/*
              <div className="space-y-1.5">
               <Label htmlFor="bio" className="flex items-center gap-2">
                 <BookText className="h-4 w-4 text-muted-foreground" />
@@ -220,6 +239,7 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
               />
               {errors.bio && <p className="text-sm text-destructive">{errors.bio.message}</p>}
             </div>
+            */}
           </CardContent>
         </Card>
 
@@ -321,7 +341,6 @@ export default function SettingsForm({ userProfile, userId }: SettingsFormProps)
           </CardContent>
         </Card>
       </div>
-      {/* The submit button is now part of the header rendered by this form component */}
     </form>
   );
 }

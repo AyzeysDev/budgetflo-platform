@@ -1,13 +1,11 @@
 // apps/web/src/app/api/user-profile/[userId]/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-// Assuming UserSettingsUpdatePayload is the correct type for the PUT request body from the frontend
 import type { WebAppUserSettingsUpdatePayload } from '@/types/user'; 
 
 const expressApiUrl = process.env.EXPRESS_API_URL;
 const nextAuthSecret = process.env.NEXTAUTH_SECRET;
 
-// Helper to ensure environment variables are checked once
 function checkEnvVars() {
   if (!expressApiUrl) {
     console.error("[BFF API user-profile] CRITICAL: EXPRESS_API_URL is not set.");
@@ -22,21 +20,21 @@ function checkEnvVars() {
 try {
   checkEnvVars();
 } catch (e) {
-  // Log error during initial load, requests will fail later if this happens
   console.error("[BFF API user-profile] Initialization Error:", (e as Error).message);
 }
 
 export async function GET(req: NextRequest, context: { params: { userId: string } }) {
   try {
-    checkEnvVars(); // Re-check in case of hot-reloading or other scenarios
+    checkEnvVars(); 
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 
   const token = await getToken({ req, secret: nextAuthSecret });
   
-  // It's generally safe to access params after awaiting getToken or other async ops.
-  const userId = context.params.userId;
+  // Await params before accessing userId
+  const params = await context.params;
+  const userId = params.userId; 
 
   if (!userId || typeof userId !== 'string') {
     console.error("[BFF API GET /user-profile/:userId] Invalid userId parameter:", userId);
@@ -51,21 +49,15 @@ export async function GET(req: NextRequest, context: { params: { userId: string 
   console.log(`[BFF API GET /user-profile/:userId] Authorized. Fetching from Express API: ${expressApiUrl}/users/${userId}`);
 
   try {
-    const response = await fetch(`${expressApiUrl}/users/${userId}`, { // This endpoint should now return UserProfileView
+    const response = await fetch(`${expressApiUrl}/users/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // No X-Internal-Api-Secret needed here as this is a user-data fetch,
-        // typically authenticated by the user's session with the BFF,
-        // and the Express API endpoint itself might be protected by other means (e.g., user auth check if not internal)
-        // or could be open if it assumes the BFF has already authenticated the user.
-        // For this specific app structure, the Express GET /users/:id is not explicitly protected by the API secret.
       },
-      cache: 'no-store', // Ensure fresh data
+      cache: 'no-store', 
     });
 
     const responseStatus = response.status;
-    // It's good practice to read the body once, especially if it might not be JSON
     const responseBodyText = await response.text(); 
 
     if (!response.ok) {
@@ -80,7 +72,7 @@ export async function GET(req: NextRequest, context: { params: { userId: string 
       return NextResponse.json({ error: errorData.error || 'Failed to fetch user profile from backend.' }, { status: responseStatus });
     }
     
-    const dataToReturn = JSON.parse(responseBodyText); // Assuming Express API returns UserProfileView
+    const dataToReturn = JSON.parse(responseBodyText); 
     return NextResponse.json(dataToReturn, { status: 200 });
 
   } catch (error) {
@@ -97,7 +89,10 @@ export async function PUT(req: NextRequest, context: { params: { userId: string 
   }
 
   const token = await getToken({ req, secret: nextAuthSecret });
-  const userId = context.params.userId; // Safe to access here
+  
+  // Await params before accessing userId
+  const params = await context.params;
+  const userId = params.userId;
 
   if (!userId || typeof userId !== 'string') {
     console.error("[BFF API PUT /user-profile/:userId] Invalid userId parameter:", userId);
@@ -117,19 +112,14 @@ export async function PUT(req: NextRequest, context: { params: { userId: string 
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
 
-  // The target Express API endpoint is now /api/users/:id/settings
   const targetApiUrl = `${expressApiUrl}/users/${userId}/settings`;
   console.log(`[BFF API PUT /user-profile/:userId] Authorized. Updating user settings via Express API: PUT ${targetApiUrl}`);
-  // console.log("[BFF API PUT /user-profile/:userId] Payload to Express API:", JSON.stringify(body)); // Potentially sensitive
 
   try {
     const response = await fetch(targetApiUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        // No X-Internal-Api-Secret needed here for the same reasons as GET.
-        // The Express API PUT /users/:id/settings should rely on the user being authenticated
-        // by the session that allowed this BFF route to be called.
       },
       body: JSON.stringify(body),
     });
@@ -149,7 +139,7 @@ export async function PUT(req: NextRequest, context: { params: { userId: string 
       return NextResponse.json({ error: errorData.error || 'Failed to update user settings via backend.' }, { status: responseStatus });
     }
     
-    const dataToReturn = JSON.parse(responseBodyText); // Expecting updated UserProfileView
+    const dataToReturn = JSON.parse(responseBodyText); 
     return NextResponse.json(dataToReturn, { status: 200 });
 
   } catch (error) {

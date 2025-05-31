@@ -24,11 +24,7 @@ export interface UserSettings {
   userId: string; // Foreign key linking to UserAccount.id
   
   displayName?: string | null; // User's preferred display name, editable by user
-  // 'image' could also be a user-uploaded/chosen image URL if that feature is added.
-  // For now, if user wants to change image, they change it in Google, and oauthImage updates.
-  // If a user-uploaded image is desired, add `customImage?: string | null;` here.
-
-  bio?: string | null; // User's biography
+  // bio?: string | null; // Bio field removed
   
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string; // e.g., 'USD', 'EUR'
@@ -48,8 +44,8 @@ export interface UserProfileView extends Omit<UserAccount, 'oauthName' | 'oauthI
   nameToDisplay: string | null; // displayName from UserSettings, or oauthName, or derived from email
   imageToDisplay: string | null; // UserSettings.customImage (if implemented) or UserAccount.oauthImage
 
-  // Fields from UserSettings
-  bio?: string | null;
+  // bio?: string | null; // Bio field removed
+  
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string;
   displayDecimalPlaces?: 0 | 2;
@@ -74,7 +70,7 @@ export interface UserSyncPayload {
  */
 export interface UserSettingsUpdatePayload {
   displayName?: string | null;
-  // bio?: string | null; // Add if bio becomes editable in settings
+  // bio?: string | null; // Bio field removed
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string;
   displayDecimalPlaces?: 0 | 2;

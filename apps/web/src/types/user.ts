@@ -13,7 +13,7 @@ export interface WebAppUserProfile {
   nameToDisplay: string | null; // User's preferred display name or OAuth name
   imageToDisplay: string | null; // User's OAuth image (or custom if implemented later)
 
-  bio?: string | null;
+  // bio?: string | null; // Bio field removed
   
   createdAt: string; // ISO date string
   lastLoginAt: string; // ISO date string
@@ -33,7 +33,7 @@ export interface WebAppUserProfile {
  */
 export interface WebAppUserSettingsUpdatePayload {
   displayName?: string | null;
-  bio?: string | null; // Making bio editable
+  // bio?: string | null; // Bio field removed
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string;
   displayDecimalPlaces?: 0 | 2;
