@@ -1,38 +1,52 @@
 // apps/api/src/services/userService.ts
-import { firestore, firebaseInitialized, firebaseAdmin } from '../config/firebase';
-import { UserProfile, UserSyncPayload, UserProfileUpdatePayload } from '../models/user.model';
+import { firestore, firebaseInitialized } from '../config/firebase';
+import { 
+  UserAccount, 
+  UserSettings, 
+  UserSyncPayload, 
+  UserSettingsUpdatePayload,
+  UserProfileView 
+} from '../models/user.model';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 
 if (!firebaseInitialized || !firestore) {
   console.error("UserService: Firebase is not initialized. User operations will fail.");
+  // Depending on the application's resilience strategy, you might throw an error here
+  // or allow the app to run in a degraded state if some parts can function without Firebase.
 }
 
 /**
- * Converts Firestore Timestamps in a user object to ISO date strings.
- * Also handles if a field is already a Date object.
- * @param userDocData The user data object from Firestore.
- * @returns A user data object with timestamps converted.
+ * Converts Firestore Timestamps in an object to ISO date strings.
+ * Handles nested objects and arrays.
+ * @param data The data object from Firestore.
+ * @returns A data object with timestamps converted.
  */
-function convertTimestamps<T extends Partial<UserProfile>>(userDocData: T | undefined): T | undefined {
-  if (!userDocData) return undefined;
-  const data: T = { ...userDocData }; // Shallow copy to avoid modifying original
-  const dateFields: (keyof UserProfile)[] = ['createdAt', 'lastLoginAt', 'profileLastUpdatedAt'];
+function convertFirestoreTimestampsToISO(data: any): any {
+  if (!data) return data;
 
-  for (const field of dateFields) {
-    if (field in data && data[field]) {
-      const fieldValue = data[field];
-      if (typeof (fieldValue as Timestamp).toDate === 'function') {
-        // It's a Firestore Timestamp
-        (data as any)[field] = (fieldValue as Timestamp).toDate().toISOString();
-      } else if (fieldValue instanceof Date) {
-        // It's already a JavaScript Date object
-        (data as any)[field] = (fieldValue as Date).toISOString();
-      }
-      // If it's already a string, assume it's correctly formatted (e.g., from a previous conversion)
+  if (Array.isArray(data)) {
+    return data.map(item => convertFirestoreTimestampsToISO(item));
+  }
+
+  if (typeof data === 'object' && data !== null) {
+    if (data instanceof Timestamp) {
+      return data.toDate().toISOString();
     }
+    if (data instanceof Date) { // Should not happen with Firestore Admin SDK directly but good practice
+      return data.toISOString();
+    }
+    
+    const newObj: { [key: string]: any } = {};
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        newObj[key] = convertFirestoreTimestampsToISO(data[key]);
+      }
+    }
+    return newObj;
   }
   return data;
 }
+
 
 /**
  * Checks if two dates are on the same calendar day.
@@ -59,119 +73,193 @@ function isYesterday(dateToCheck: Date, today: Date): boolean {
 }
 
 /**
- * Synchronizes user data, updates last login, and manages daily streak.
- * Initializes default preferences for new users.
+ * Synchronizes user account data from OAuth, updates last login, manages daily streak,
+ * and initializes user settings if they don't exist.
  */
-export async function syncUser(payload: UserSyncPayload): Promise<{ userId: string; operation: 'created' | 'updated'; data: UserProfile | null }> {
-  if (!firestore) throw new Error("Firestore is not initialized.");
+export async function syncUser(syncPayload: UserSyncPayload): Promise<{ userId: string; operation: 'created' | 'updated'; data: UserProfileView | null }> {
+  if (!firestore) throw new Error("Firestore is not initialized for syncUser.");
 
-  const { id, email, name, image } = payload;
-  const userRef = firestore.collection('users').doc(id);
-  const userDoc = await userRef.get();
+  const { id, email, name: oauthNameFromPayload, image: oauthImageFromPayload } = syncPayload;
+  
+  const userAccountRef = firestore.collection('users').doc(id);
+  const userSettingsRef = firestore.collection('user_settings').doc(id);
+
   const now = new Date();
-  const serverTimestamp = FieldValue.serverTimestamp() as Timestamp; // For setting Firestore server timestamps
+  const serverTimestamp = FieldValue.serverTimestamp() as Timestamp;
 
   let operation: 'created' | 'updated';
-  const userDataFromDb = userDoc.data() as UserProfile | undefined;
+  let userAccountData: Partial<UserAccount> = {};
+  let userSettingsData: Partial<UserSettings> = {};
 
-  const dataToProcess: Partial<UserProfile> = {
-    email: email,
-    name: name ?? null,
-    image: image ?? null,
-  };
+  const userAccountDoc = await userAccountRef.get();
+  const userSettingsDoc = await userSettingsRef.get();
 
-  if (!userDoc.exists) {
+  const existingUserAccount = userAccountDoc.data() as UserAccount | undefined;
+
+  // Update UserAccount data (OAuth related and system managed)
+  userAccountData.email = email;
+  userAccountData.oauthName = oauthNameFromPayload ?? null;
+  userAccountData.oauthImage = oauthImageFromPayload ?? null;
+  userAccountData.lastLoginAt = serverTimestamp;
+
+  if (!userAccountDoc.exists) {
     operation = 'created';
-    dataToProcess.id = id;
-    dataToProcess.createdAt = serverTimestamp;
-    dataToProcess.dailyStreak = 1;
-    dataToProcess.notificationFrequency = 'weekly';
-    dataToProcess.preferredCurrency = 'USD';
-    dataToProcess.displayDecimalPlaces = 2;
-    console.log(`UserService: New user created: ${id}. Initializing streak and preferences.`);
+    userAccountData.id = id;
+    userAccountData.createdAt = serverTimestamp;
+    userAccountData.dailyStreak = 1;
+    console.log(`UserService (syncUser): New user account created: ${id}. Initializing streak.`);
+    await userAccountRef.set(userAccountData);
   } else {
     operation = 'updated';
-    let currentDailyStreak = userDataFromDb?.dailyStreak || 0;
-    const lastLoginTimestamp = userDataFromDb?.lastLoginAt as Timestamp | undefined;
+    let currentDailyStreak = existingUserAccount?.dailyStreak || 0;
+    const lastLoginTimestamp = existingUserAccount?.lastLoginAt as Timestamp | undefined;
 
     if (lastLoginTimestamp) {
       const lastLoginDate = lastLoginTimestamp.toDate();
-      if (!isSameCalendarDay(lastLoginDate, now)) {
+      if (!isSameCalendarDay(lastLoginDate, now)) { // Logged in on a new day
         if (isYesterday(lastLoginDate, now)) {
           currentDailyStreak++;
         } else {
           currentDailyStreak = 1; // Reset streak
         }
-        dataToProcess.dailyStreak = currentDailyStreak;
-        console.log(`UserService: User ${id} logged in on a new day. Streak updated to ${currentDailyStreak}.`);
+        userAccountData.dailyStreak = currentDailyStreak;
+        console.log(`UserService (syncUser): User ${id} logged in on a new day. Streak updated to ${currentDailyStreak}.`);
       } else {
         // Logged in again on the same day, streak doesn't change from this login
-        // but we ensure it's set if it was missing (shouldn't happen if logic is correct)
-        dataToProcess.dailyStreak = userDataFromDb?.dailyStreak ?? currentDailyStreak;
-        console.log(`UserService: User ${id} logged in again today. Streak remains ${dataToProcess.dailyStreak}.`);
+        // but ensure it's set if it was missing from existingUserAccount (unlikely but safe)
+        userAccountData.dailyStreak = existingUserAccount?.dailyStreak ?? currentDailyStreak;
       }
     } else {
-      // Existing user but no lastLoginAt or dailyStreak (e.g., data migration or error)
-      dataToProcess.dailyStreak = 1;
-      console.log(`UserService: User ${id} missing lastLoginAt/dailyStreak. Initializing streak to 1.`);
+      // Existing user but no lastLoginAt (e.g., data migration or error), or no dailyStreak
+      userAccountData.dailyStreak = 1;
+      console.log(`UserService (syncUser): User ${id} missing lastLoginAt/dailyStreak. Initializing/resetting streak to 1.`);
     }
-    // Ensure existing preferences are not overwritten with defaults if they exist
-    dataToProcess.notificationFrequency = userDataFromDb?.notificationFrequency ?? 'weekly';
-    dataToProcess.preferredCurrency = userDataFromDb?.preferredCurrency ?? 'USD';
-    dataToProcess.displayDecimalPlaces = userDataFromDb?.displayDecimalPlaces ?? 2;
-    console.log(`UserService: User updated: ${id}`);
+    await userAccountRef.update(userAccountData); // Update only the fields in userAccountData
+    console.log(`UserService (syncUser): User account updated: ${id}`);
   }
 
-  dataToProcess.lastLoginAt = serverTimestamp; // Always update lastLoginAt
-
-  if (operation === 'created') {
-    await userRef.set(dataToProcess);
-  } else {
-    // For existing users, use update to merge and not overwrite `createdAt`
-    // and only update fields present in dataToProcess
-    await userRef.update(dataToProcess);
+  // Initialize UserSettings if they don't exist
+  if (!userSettingsDoc.exists) {
+    userSettingsData.userId = id;
+    // Use OAuth name as initial displayName if no settings exist
+    userSettingsData.displayName = oauthNameFromPayload ?? null; 
+    userSettingsData.bio = null; // Default bio
+    userSettingsData.notificationFrequency = 'weekly'; // Default preference
+    userSettingsData.preferredCurrency = 'USD'; // Default preference
+    userSettingsData.displayDecimalPlaces = 2; // Default preference
+    userSettingsData.settingsLastUpdatedAt = serverTimestamp;
+    await userSettingsRef.set(userSettingsData);
+    console.log(`UserService (syncUser): User settings initialized for new or existing user: ${id}`);
   }
-  
-  const updatedDocSnap = await userRef.get();
-  const finalData = convertTimestamps(updatedDocSnap.data() as UserProfile | undefined);
+  // Note: We do NOT overwrite existing user settings with OAuth data during sync.
+  // `displayName` in user_settings is only set if settings don't exist.
 
-  return { userId: id, operation, data: finalData || null };
+  // Fetch combined profile view for the response
+  const finalProfileView = await getUserProfileViewById(id);
+  return { userId: id, operation, data: finalProfileView };
 }
 
-export async function getUserById(userId: string): Promise<UserProfile | null> {
-  if (!firestore) throw new Error("Firestore is not initialized.");
-  const userRef = firestore.collection('users').doc(userId);
-  const doc = await userRef.get();
+/**
+ * Fetches the combined user profile view (UserAccount + UserSettings).
+ * Gives precedence to UserSettings for displayable fields.
+ */
+export async function getUserProfileViewById(userId: string): Promise<UserProfileView | null> {
+  if (!firestore) throw new Error("Firestore is not initialized for getUserProfileViewById.");
 
-  if (!doc.exists) {
-    console.log(`UserService: User not found: ${userId}`);
+  const userAccountRef = firestore.collection('users').doc(userId);
+  const userSettingsRef = firestore.collection('user_settings').doc(userId);
+
+  const accountDoc = await userAccountRef.get();
+  const settingsDoc = await userSettingsRef.get();
+
+  if (!accountDoc.exists) {
+    console.log(`UserService (getUserProfileViewById): UserAccount not found: ${userId}`);
     return null;
   }
-  return convertTimestamps(doc.data() as UserProfile | undefined) || null;
+
+  const accountData = accountDoc.data() as UserAccount;
+  const settingsData = settingsDoc.exists ? settingsDoc.data() as UserSettings : null;
+
+  // Determine name and image to display
+  let nameToDisplay: string | null = null;
+  if (settingsData?.displayName !== undefined && settingsData.displayName !== null) {
+    nameToDisplay = settingsData.displayName;
+  } else if (accountData.oauthName !== undefined && accountData.oauthName !== null) {
+    nameToDisplay = accountData.oauthName;
+  } else {
+    // Fallback to part of email if no name is available
+    nameToDisplay = accountData.email.split('@')[0];
+  }
+  
+  // For image, if we implement user-uploaded images, that would take precedence here.
+  // const imageToDisplay = settingsData?.customImageURL || accountData.oauthImage || null;
+  const imageToDisplay = accountData.oauthImage || null; // Using OAuth image for now
+
+  const combinedProfile: UserProfileView = {
+    id: accountData.id,
+    email: accountData.email,
+    createdAt: accountData.createdAt as Timestamp, // Keep as Timestamp for now, will be converted by final handler
+    lastLoginAt: accountData.lastLoginAt as Timestamp,
+    dailyStreak: accountData.dailyStreak,
+    
+    nameToDisplay: nameToDisplay,
+    imageToDisplay: imageToDisplay,
+    
+    bio: settingsData?.bio ?? null,
+    notificationFrequency: settingsData?.notificationFrequency ?? 'weekly', // Default if not set
+    preferredCurrency: settingsData?.preferredCurrency ?? 'USD', // Default if not set
+    displayDecimalPlaces: settingsData?.displayDecimalPlaces ?? 2, // Default if not set
+    
+    // Determine overall profileLastUpdatedAt
+    // This could be either settingsLastUpdatedAt or lastLoginAt (if account details changed via OAuth)
+    // For simplicity, let's prioritize settingsLastUpdatedAt if available, otherwise lastLoginAt.
+    profileLastUpdatedAt: (settingsData?.settingsLastUpdatedAt as Timestamp | undefined)?.toDate().toISOString() || (accountData.lastLoginAt as Timestamp).toDate().toISOString(),
+    settingsLastUpdatedAt: (settingsData?.settingsLastUpdatedAt as Timestamp | undefined)?.toDate().toISOString() || null,
+  };
+  
+  return convertFirestoreTimestampsToISO(combinedProfile) as UserProfileView;
 }
 
-export async function updateUserProfile(userId: string, profileData: UserProfileUpdatePayload): Promise<UserProfile | null> {
-  if (!firestore) throw new Error("Firestore is not initialized.");
-  const userRef = firestore.collection('users').doc(userId);
 
-  const dataToUpdate: Partial<UserProfile> = {};
+/**
+ * Updates user-configurable settings in the 'user_settings' collection.
+ */
+export async function updateUserSettings(userId: string, settingsUpdatePayload: UserSettingsUpdatePayload): Promise<UserProfileView | null> {
+  if (!firestore) throw new Error("Firestore is not initialized for updateUserSettings.");
   
-  // Only add fields to the update object if they are explicitly provided in profileData
-  if (profileData.name !== undefined) dataToUpdate.name = profileData.name;
-  if (profileData.notificationFrequency !== undefined) dataToUpdate.notificationFrequency = profileData.notificationFrequency;
-  if (profileData.preferredCurrency !== undefined) dataToUpdate.preferredCurrency = profileData.preferredCurrency;
-  if (profileData.displayDecimalPlaces !== undefined) dataToUpdate.displayDecimalPlaces = profileData.displayDecimalPlaces;
+  const userSettingsRef = firestore.collection('user_settings').doc(userId);
 
-  if (Object.keys(dataToUpdate).length === 0) {
-    console.log(`UserService: No valid fields to update for user: ${userId}`);
-    return getUserById(userId); // Return current profile if nothing to update
+  const dataToUpdate: Partial<UserSettings> = {};
+  
+  // Explicitly map fields from payload to ensure only allowed fields are updated
+  if (settingsUpdatePayload.displayName !== undefined) {
+    dataToUpdate.displayName = settingsUpdatePayload.displayName;
+  }
+  // if (settingsUpdatePayload.bio !== undefined) { // Add if bio becomes editable
+  //   dataToUpdate.bio = settingsUpdatePayload.bio;
+  // }
+  if (settingsUpdatePayload.notificationFrequency !== undefined) {
+    dataToUpdate.notificationFrequency = settingsUpdatePayload.notificationFrequency;
+  }
+  if (settingsUpdatePayload.preferredCurrency !== undefined) {
+    dataToUpdate.preferredCurrency = settingsUpdatePayload.preferredCurrency;
+  }
+  if (settingsUpdatePayload.displayDecimalPlaces !== undefined) {
+    dataToUpdate.displayDecimalPlaces = settingsUpdatePayload.displayDecimalPlaces;
   }
 
-  dataToUpdate.profileLastUpdatedAt = FieldValue.serverTimestamp() as Timestamp;
+  if (Object.keys(dataToUpdate).length === 0) {
+    console.log(`UserService (updateUserSettings): No valid fields to update for user: ${userId}`);
+    return getUserProfileViewById(userId); // Return current profile if nothing to update
+  }
 
-  await userRef.update(dataToUpdate);
-  console.log(`UserService: User profile updated for: ${userId} with data:`, JSON.stringify(dataToUpdate));
+  dataToUpdate.settingsLastUpdatedAt = FieldValue.serverTimestamp() as Timestamp;
 
-  const updatedDocSnap = await userRef.get();
-  return convertTimestamps(updatedDocSnap.data() as UserProfile | undefined) || null;
+  // Use set with merge: true to create the document if it doesn't exist, or update if it does.
+  // This is safer if for some reason settings were not initialized during sync.
+  await userSettingsRef.set(dataToUpdate, { merge: true }); 
+  
+  console.log(`UserService (updateUserSettings): User settings updated for: ${userId} with data:`, JSON.stringify(dataToUpdate));
+
+  return getUserProfileViewById(userId); // Fetch and return the merged profile view
 }

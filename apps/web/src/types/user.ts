@@ -1,35 +1,39 @@
 // apps/web/src/types/user.ts
 
 /**
- * Defines the structure of a user profile as expected by the web application.
+ * Represents the combined view of a user's profile as fetched from the BFF,
+ * which in turn gets it from the backend API.
  * Timestamps are expected as ISO date strings.
+ * This should mirror the UserProfileView from the API's models.
  */
 export interface WebAppUserProfile {
   id: string;
   email: string;
-  name?: string | null;
-  image?: string | null; // URL of the profile image (from OAuth)
-  bio?: string | null; // Retained for data model consistency, though not editable in current settings form
-  createdAt: string;
-  lastLoginAt: string;
-  profileLastUpdatedAt?: string | null;
+  
+  nameToDisplay: string | null; // User's preferred display name or OAuth name
+  imageToDisplay: string | null; // User's OAuth image (or custom if implemented later)
 
-  // New fields
-  dailyStreak?: number; // Display only
+  bio?: string | null;
+  
+  createdAt: string; // ISO date string
+  lastLoginAt: string; // ISO date string
+  dailyStreak?: number;
+  
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string; // e.g., 'USD', 'EUR'
   displayDecimalPlaces?: 0 | 2;
+  
+  profileLastUpdatedAt?: string | null; // ISO date string (overall last update)
+  settingsLastUpdatedAt?: string | null; // ISO date string (when settings specifically changed)
 }
 
 /**
- * Defines the payload for updating a user's profile from the web application.
+ * Defines the payload for updating user-configurable settings from the web application.
+ * This should mirror the UserSettingsUpdatePayload from the API's models.
  */
-export interface WebAppUserProfileUpdatePayload {
-  name?: string | null;
-  // bio removed - not editable in this form
-  // image removed - not directly editable in this form
-
-  // New editable fields
+export interface WebAppUserSettingsUpdatePayload {
+  displayName?: string | null;
+  bio?: string | null; // Making bio editable
   notificationFrequency?: 'daily' | 'weekly' | 'monthly' | 'none';
   preferredCurrency?: string;
   displayDecimalPlaces?: 0 | 2;
