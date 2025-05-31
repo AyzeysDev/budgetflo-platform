@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers'; // For passing cookies
 import { Button } from '@/components/ui/button';
 import {
   PlusCircle,
@@ -19,19 +20,48 @@ import {
   FilePieChart,
   Activity,
   Scale,
-  // Settings, // Unused in this component
-  // DollarSign, // Unused in this component
-  // ShieldAlert, // Unused in this component
+  AlertTriangleIcon, // For error display
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-// Import Radix UI Progress primitives
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import { cn } from "@/lib/utils";
+import type { WebAppUserProfile } from '@/types/user'; // Import the user profile type
 
 export const metadata: Metadata = {
   title: 'Dashboard | BudgetFlo',
   description: 'Your personal finance dashboard. Track spending, manage budgets, and get AI insights.',
 };
+
+// Copied from settings page - should be centralized in a lib/data-fetching.ts or similar
+async function getUserProfileDataForPage(userId: string, cookieHeader: string | null): Promise<WebAppUserProfile | null> {
+  const baseUrl = process.env.NEXTAUTH_URL_INTERNAL || process.env.NEXTAUTH_URL;
+  if (!baseUrl) {
+    console.error("HomePage (getUserProfileDataForPage): NEXTAUTH_URL or NEXTAUTH_URL_INTERNAL is not set.");
+    return null;
+  }
+  const fetchUrl = new URL(`/api/user-profile/${userId}`, baseUrl).toString();
+  try {
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(cookieHeader && { 'Cookie': cookieHeader }),
+      },
+      cache: 'no-store', 
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`HomePage (getUserProfileDataForPage): Failed to fetch user profile for ${userId}. Status: ${response.status}. Body: ${errorBody.substring(0,300)}`);
+      return null;
+    }
+    const profileData = await response.json();
+    return profileData as WebAppUserProfile;
+  } catch (error) {
+    console.error(`HomePage (getUserProfileDataForPage): Exception fetching user profile for ${userId}:`, error);
+    return null;
+  }
+}
+
 
 // Mock data for demonstration - replace with actual data fetching
 const mockBudgetData = [
@@ -57,12 +87,28 @@ const mockFinancialGoals = [
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     const callbackUrl = encodeURIComponent("/home");
     redirect(`/?callbackUrl=${callbackUrl}#hero-section`);
   }
 
-  const userName = session.user.name?.split(' ')[0] || session.user.email?.split('@')[0] || 'User';
+  const userId = session.user.id;
+  const requestHeaders = await headers();
+  const cookieHeader = requestHeaders.get('cookie');
+  const userProfile = await getUserProfileDataForPage(userId, cookieHeader);
+
+  // Use userProfile.nameToDisplay for the welcome message
+  // Fallback to session.user.name or email part if userProfile is not available for some reason
+  const displayName = userProfile?.nameToDisplay || session.user.name?.split(' ')[0] || session.user.email?.split('@')[0] || 'User';
+
+  if (!userProfile) {
+    // Handle case where profile data couldn't be fetched but session exists
+    // This allows the page to render with a warning or fallback data.
+    console.warn(`HomePage: User profile data for ${userId} could not be fetched. Displaying with fallback name.`);
+    // You might want to show a more prominent error or limited dashboard.
+    // For now, we'll proceed with the displayName fallback.
+  }
+
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
@@ -70,7 +116,7 @@ export default async function HomePage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-            Welcome back, {userName}!
+            Welcome back, {displayName}!
           </h1>
           <p className="text-md text-muted-foreground mt-1">
             Here&apos;s your financial overview for this month.
@@ -89,6 +135,20 @@ export default async function HomePage() {
           </Button>
         </div>
       </div>
+
+      {!userProfile && (
+        <Card className="border-destructive bg-destructive/10">
+          <CardHeader className="flex flex-row items-center space-x-2 pb-2">
+            <AlertTriangleIcon className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-destructive text-lg">Profile Data Issue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-destructive-foreground">
+              Could not load your full profile details. Some information on this page might be incomplete. Please try refreshing or visit settings.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Key Metrics Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">

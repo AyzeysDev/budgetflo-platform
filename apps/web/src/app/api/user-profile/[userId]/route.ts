@@ -32,9 +32,9 @@ export async function GET(req: NextRequest, context: { params: { userId: string 
 
   const token = await getToken({ req, secret: nextAuthSecret });
   
-  // Await params before accessing userId
+  // FIXED: Await params first, then destructure
   const params = await context.params;
-  const userId = params.userId; 
+  const { userId } = params;
 
   if (!userId || typeof userId !== 'string') {
     console.error("[BFF API GET /user-profile/:userId] Invalid userId parameter:", userId);
@@ -90,9 +90,9 @@ export async function PUT(req: NextRequest, context: { params: { userId: string 
 
   const token = await getToken({ req, secret: nextAuthSecret });
   
-  // Await params before accessing userId
+  // FIXED: Await params first, then destructure
   const params = await context.params;
-  const userId = params.userId;
+  const { userId } = params;
 
   if (!userId || typeof userId !== 'string') {
     console.error("[BFF API PUT /user-profile/:userId] Invalid userId parameter:", userId);
