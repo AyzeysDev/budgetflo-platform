@@ -15,7 +15,8 @@ import {
   BotMessageSquare,
   FileText,
   Target,
-//   PlusCircle,
+  Tags, // New icon for Categories
+  // PlusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +34,6 @@ import React from "react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { cn } from "@/lib/utils";
 
-// Re-using NavItem definition or import if centralized
 interface NavItem {
   href: string;
   label: string;
@@ -44,6 +44,7 @@ interface NavItem {
 const mainNavItemsMobile: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
   { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
+  { href: "/categories", label: "Categories", icon: Tags, section: "Management" }, // Added Categories
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },
   { href: "/reports", label: "Reports", icon: PieChartIcon, section: "Analysis" },
@@ -111,7 +112,8 @@ export function MobileHeader() {
                         href={item.href}
                         className={cn(
                           "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                          pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/home" && item.href !== "/")
+                          // More robust active link check:
+                          (pathname === item.href || (item.href !== "/home" && pathname.startsWith(item.href)))
                             ? "bg-primary/10 text-primary dark:bg-primary/20"
                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-muted/50"
                         )}

@@ -8,6 +8,7 @@ import {
   UserProfileView 
 } from '../models/user.model';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { seedDefaultCategoriesForUser } from './categoryService'; // Import category seeding function
 
 if (!firebaseInitialized || !firestore) {
   console.error("UserService: Firebase is not initialized. User operations will fail.");
@@ -15,11 +16,9 @@ if (!firebaseInitialized || !firestore) {
 
 function convertFirestoreTimestampsToISO(data: any): any {
   if (!data) return data;
-
   if (Array.isArray(data)) {
     return data.map(item => convertFirestoreTimestampsToISO(item));
   }
-
   if (typeof data === 'object' && data !== null) {
     if (data instanceof Timestamp) {
       return data.toDate().toISOString();
@@ -27,7 +26,6 @@ function convertFirestoreTimestampsToISO(data: any): any {
     if (data instanceof Date) { 
       return data.toISOString();
     }
-    
     const newObj: { [key: string]: any } = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
@@ -67,7 +65,7 @@ export async function syncUser(syncPayload: UserSyncPayload): Promise<{ userId: 
   let userSettingsData: Partial<UserSettings> = {};
 
   const userAccountDoc = await userAccountRef.get();
-  const userSettingsDoc = await userSettingsRef.get();
+  const userSettingsDoc = await userSettingsRef.get(); // Check if settings exist
 
   const existingUserAccount = userAccountDoc.data() as UserAccount | undefined;
 
@@ -82,6 +80,16 @@ export async function syncUser(syncPayload: UserSyncPayload): Promise<{ userId: 
     userAccountData.createdAt = serverTimestamp;
     userAccountData.dailyStreak = 1;
     await userAccountRef.set(userAccountData);
+    console.log(`UserService (syncUser): New user account created: ${id}.`);
+
+    // Seed default categories for new user
+    try {
+      await seedDefaultCategoriesForUser(id);
+    } catch (seedError) {
+      console.error(`UserService (syncUser): Failed to seed categories for new user ${id}:`, seedError);
+      // Continue with user sync even if category seeding fails, but log the error.
+    }
+
   } else {
     operation = 'updated';
     let currentDailyStreak = existingUserAccount?.dailyStreak || 0;
@@ -103,17 +111,19 @@ export async function syncUser(syncPayload: UserSyncPayload): Promise<{ userId: 
       userAccountData.dailyStreak = 1;
     }
     await userAccountRef.update(userAccountData);
+    console.log(`UserService (syncUser): User account updated: ${id}.`);
   }
 
+  // Initialize UserSettings if they don't exist (could happen even for existing user if settings doc was missed)
   if (!userSettingsDoc.exists) {
     userSettingsData.userId = id;
     userSettingsData.displayName = oauthNameFromPayload ?? null; 
-    // userSettingsData.bio = null; // Bio field removed
     userSettingsData.notificationFrequency = 'weekly'; 
     userSettingsData.preferredCurrency = 'USD'; 
     userSettingsData.displayDecimalPlaces = 2; 
     userSettingsData.settingsLastUpdatedAt = serverTimestamp;
     await userSettingsRef.set(userSettingsData);
+    console.log(`UserService (syncUser): User settings initialized for user: ${id}`);
   }
 
   const finalProfileView = await getUserProfileViewById(id);
@@ -153,15 +163,11 @@ export async function getUserProfileViewById(userId: string): Promise<UserProfil
     createdAt: accountData.createdAt as Timestamp,
     lastLoginAt: accountData.lastLoginAt as Timestamp,
     dailyStreak: accountData.dailyStreak,
-    
     nameToDisplay: nameToDisplay,
     imageToDisplay: imageToDisplay,
-    
-    // bio: settingsData?.bio ?? null, // Bio field removed
     notificationFrequency: settingsData?.notificationFrequency ?? 'weekly',
     preferredCurrency: settingsData?.preferredCurrency ?? 'USD',
     displayDecimalPlaces: settingsData?.displayDecimalPlaces ?? 2,
-    
     profileLastUpdatedAt: (settingsData?.settingsLastUpdatedAt as Timestamp | undefined)?.toDate().toISOString() || (accountData.lastLoginAt as Timestamp).toDate().toISOString(),
     settingsLastUpdatedAt: (settingsData?.settingsLastUpdatedAt as Timestamp | undefined)?.toDate().toISOString() || null,
   };
@@ -173,13 +179,11 @@ export async function updateUserSettings(userId: string, settingsUpdatePayload: 
   if (!firestore) throw new Error("Firestore is not initialized for updateUserSettings.");
   
   const userSettingsRef = firestore.collection('user_settings').doc(userId);
-
   const dataToUpdate: Partial<UserSettings> = {};
   
   if (settingsUpdatePayload.displayName !== undefined) {
     dataToUpdate.displayName = settingsUpdatePayload.displayName;
   }
-  // Bio field removed from payload and update logic
   if (settingsUpdatePayload.notificationFrequency !== undefined) {
     dataToUpdate.notificationFrequency = settingsUpdatePayload.notificationFrequency;
   }
@@ -195,7 +199,6 @@ export async function updateUserSettings(userId: string, settingsUpdatePayload: 
   }
 
   dataToUpdate.settingsLastUpdatedAt = FieldValue.serverTimestamp() as Timestamp;
-
   await userSettingsRef.set(dataToUpdate, { merge: true }); 
   
   return getUserProfileViewById(userId);

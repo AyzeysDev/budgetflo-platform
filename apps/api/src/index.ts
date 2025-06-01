@@ -1,34 +1,17 @@
 // apps/api/src/index.ts
-import express, { Express, Request, Response, NextFunction, Router } from 'express'; // Import Router
+import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import userRoutes from './routes/userRoutes';
-import { firebaseInitialized } from './config/firebase'; // firebaseAdmin removed as it's not directly used here
+import categoryRoutes from './routes/categoryRoutes'; 
+import budgetRoutes from './routes/budgetRoutes'; 
+import { firebaseInitialized } from './config/firebase';
 
 dotenv.config();
 
 const app: Express = express();
 const port = process.env.PORT || 3001;
 
-// Middleware to verify BFF API Secret
-const BFF_API_SECRET = process.env.BFF_API_SECRET;
-const bffAuthMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-  // This middleware will now be applied more specifically
-  // For example, only to the /sync route within userRoutes
-  if (!BFF_API_SECRET) {
-    console.warn("BFF_API_SECRET is not set in apps/api. Endpoint /users/sync is less secure if this middleware is intended for it.");
-    return next();
-  }
-  const providedSecret = req.headers['x-internal-api-secret'];
-  if (providedSecret !== BFF_API_SECRET) {
-    console.warn(`Unauthorized attempt to access ${req.path} - Invalid API secret.`);
-    res.status(401).json({ error: 'Unauthorized: Invalid API secret.' });
-    return; // Explicitly return to stop further processing
-  }
-  next();
-};
-
-// Core Middleware
 app.use(cors({
   origin: process.env.WEB_APP_URL || 'http://localhost:3000',
   credentials: true,
@@ -36,54 +19,93 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Basic Route for API health check
 app.get('/api', (req: Request, res: Response) => {
-  res.json({ message: 'BudgetFlo Express API is running!', firebase: firebaseInitialized ? 'connected' : 'disconnected' });
+  res.json({ 
+    message: 'BudgetFlo Express API is running!', 
+    firebase: firebaseInitialized ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Create a new router for /api path to apply middleware selectively if needed
-const apiRouter = Router();
+app.use('/api/users', userRoutes); 
 
-// Apply bffAuthMiddleware specifically to routes that need it
-// For example, if only the /sync route under /api/users needs it,
-// it's better to apply it within userRoutes.ts or to a sub-router.
-// If ALL /api/users routes (or a subset) need it:
-if (BFF_API_SECRET) {
-    // Example: Protecting a specific sub-path or all user routes
-    // For now, let's assume it's applied in userRoutes.ts for the /sync path
-    // If you want to protect all /api/users routes:
-    // apiRouter.use('/users', bffAuthMiddleware, userRoutes);
-    // Or, if only specific routes within userRoutes need it, handle it there.
-    // For simplicity, and based on the original intent to protect /users/sync,
-    // this middleware should be applied *before* the specific route in userRoutes.ts.
-    // The current structure in userRoutes.ts does not show this middleware.
-    // Let's adjust userRoutes.ts to include this middleware for the /sync path.
-    // For now, we won't apply it globally here to avoid the type error with app.use('/api', bffAuthMiddleware)
-    // as bffAuthMiddleware is a simple handler, not an Express Application.
+// Corrected Authentication Middleware
+function authenticateUserForScopedResources(req: Request, res: Response, next: NextFunction): void { // Return type is void
+  const authenticatedUserId = req.headers['x-authenticated-user-id'] as string; 
+  const requestedUserIdInParams = req.params.userId;
+
+  if (!authenticatedUserId) {
+    console.warn(`[Auth Middleware] Access to /api/users/${requestedUserIdInParams}/* denied: Missing X-Authenticated-User-Id header (placeholder).`);
+    // Send response and then return to stop further execution in this middleware
+    res.status(401).json({ error: "Unauthorized: Authentication token required." });
+    return; 
+  }
+  
+  if (authenticatedUserId !== requestedUserIdInParams) {
+    console.warn(`[Auth Middleware] Forbidden: User ${authenticatedUserId} attempted to access resources for user ${requestedUserIdInParams}.`);
+    // Send response and then return
+    res.status(403).json({ error: "Forbidden: You do not have permission to access this resource." });
+    return; 
+  }
+  
+  console.log(`[Auth Middleware] User ${authenticatedUserId} authorized for /api/users/${requestedUserIdInParams}/*`);
+  next(); // Proceed to the next middleware or route handler
 }
 
-// Mount User Routes
-app.use('/api/users', userRoutes); // userRoutes will handle its own specific middleware if needed
+const userScopedRouter = express.Router({ mergeParams: true });
+userScopedRouter.use('/categories', categoryRoutes);
+userScopedRouter.use('/budgets', budgetRoutes); 
 
-// Global Error Handler (must be last piece of middleware)
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // next is implicitly any if not used, but good to type
-  console.error("Global Error Handler caught:", err.stack);
-  const statusCode = (err as any).status || 500;
-  res.status(statusCode).json({
-    error: 'An unexpected error occurred on the server.',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
-  });
+app.use('/api/users/:userId', authenticateUserForScopedResources, userScopedRouter);
+
+// Global Error Handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Added next, though not used, it's standard
+  console.error("Global Error Handler caught an error:", err.message);
+  if (process.env.NODE_ENV === 'development') {
+    console.error(err.stack); 
+  }
+
+  let statusCode = (err as any).status || 500;
+  let errorMessage = err.message || 'An unexpected error occurred on the server.';
+  let errorDetails = (err as any).errors; 
+
+  if (err.name === 'UnauthorizedError' || err.message.toLowerCase().includes('unauthorized')) {
+    statusCode = 401;
+    errorMessage = err.message; 
+  } else if (err.message.toLowerCase().includes('not found')) {
+    statusCode = 404;
+  } else if (errorDetails && Array.isArray(errorDetails)) { 
+    statusCode = 400;
+    errorMessage = "Validation failed.";
+  }
+  
+  if (process.env.NODE_ENV !== 'development' && statusCode === 500) {
+    errorMessage = 'An internal server error occurred.';
+  }
+
+  // Ensure response is only sent if headers haven't been sent yet
+  if (!res.headersSent) {
+    res.status(statusCode).json({
+      error: errorMessage,
+      ...(errorDetails && { details: errorDetails }),
+      ...(process.env.NODE_ENV === 'development' && statusCode === 500 && { stack: err.stack }),
+    });
+  } else {
+    // If headers already sent, delegate to default Express error handler
+    // This typically happens if an error occurs during streaming or after a response has started.
+    console.error("Global Error Handler: Headers already sent, cannot send error JSON response.");
+    // next(err); // Uncomment if you want Express's default handler to take over (might terminate connection)
+  }
 });
 
 if (firebaseInitialized) {
   app.listen(port, () => {
     console.log(`[server]: API Server is running at http://localhost:${port}`);
     console.log(`[server]: Firebase connection status: Initialized`);
-    if (!BFF_API_SECRET) {
-        console.warn("[server]: BFF_API_SECRET is not set. Calls between BFF and API are not secured with a shared secret.");
+    if (!process.env.BFF_API_SECRET) {
+        console.warn("[server]: BFF_API_SECRET is not set. The /api/users/sync endpoint is less secure.");
     }
   });
 } else {
   console.error('[server]: Critical - Firebase failed to initialize. Server cannot start reliably with DB operations.');
-  // process.exit(1);
 }

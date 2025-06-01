@@ -9,17 +9,18 @@ import {
   Wallet,
   CreditCard,
   TrendingUp,
-  PieChartIcon, // Changed from PieChart to avoid conflict if PieChart is a component
+  PieChartIcon,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
   PiggyBank,
-  BotMessageSquare, // For AI Insights
-  FileText, // For Reports/Loans/Savings
-//   ShieldCheck, // For Loans/Debts
-  Target, // For Goals
-//   PlusCircle, // For Add New
+  BotMessageSquare,
+  FileText,
+  Target,
+  Tags, // New icon for Categories
+  // ShieldCheck, 
+  // PlusCircle, 
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,20 +33,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
-import { ThemeToggle } from "@/components/common/ThemeToggle"; // Assuming ThemeToggle is in common
+import { ThemeToggle } from "@/components/common/ThemeToggle"; 
 import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  subItems?: NavItem[]; // For nested navigation if needed in future
-  section?: string; // To group items
+  subItems?: NavItem[]; 
+  section?: string; 
 }
 
 const mainNavItems: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
   { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
+  { href: "/categories", label: "Categories", icon: Tags, section: "Management" }, // Added Categories
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },
   { href: "/reports", label: "Reports", icon: PieChartIcon, section: "Analysis" },
@@ -117,7 +119,9 @@ export function Sidebar() {
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     isCollapsed ? "justify-center" : "",
-                    pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/home" && item.href !== "/")
+                    // More robust active link check:
+                    // For "/home", exact match. For others, startsWith.
+                    (pathname === item.href || (item.href !== "/home" && pathname.startsWith(item.href)))
                       ? "bg-primary/10 text-primary dark:bg-primary/20"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-muted/50"
                   )}
@@ -181,7 +185,7 @@ export function Sidebar() {
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
-             {isCollapsed && session?.user && ( // Avatar only for collapsed state if no space for dropdown trigger
+             {isCollapsed && session?.user && ( 
                 <Avatar className="h-8 w-8 mt-2">
                     <AvatarImage src={session.user.image ?? undefined} alt={session.user.name ?? "User"} />
                     <AvatarFallback>{userInitial}</AvatarFallback>
