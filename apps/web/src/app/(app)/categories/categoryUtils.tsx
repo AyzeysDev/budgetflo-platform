@@ -30,6 +30,15 @@ export const availableIcons = [
 
 export type AvailableIconName = typeof availableIcons[number];
 
+// Default icons and colors
+export const DEFAULT_EXPENSE_ICON: AvailableIconName = "ShoppingCart";
+export const DEFAULT_EXPENSE_COLOR: string = "#EF5350"; // A red from the palette
+
+export const DEFAULT_INCOME_ICON: AvailableIconName = "Landmark";
+export const DEFAULT_INCOME_COLOR: string = "#66BB6A"; // A green from the palette
+
+export const FALLBACK_ICON: AvailableIconName = "Tag"; // Default fallback if an icon name is somehow invalid
+
 // Type guard to check if a string is a valid AvailableIconName
 export function isValidIconName(name: string | null | undefined): name is AvailableIconName {
   if (!name) return false;
@@ -42,15 +51,13 @@ for (const iconName of availableIcons) {
   if (LucideIcons[iconName]) {
     TypedLucideIcons[iconName] = LucideIcons[iconName] as LucideIcon;
   } else {
-    // This case should ideally not happen if availableIcons is kept in sync with LucideIcons exports
     console.warn(`Lucide icon "${iconName}" not found in LucideIcons module during TypedLucideIcons creation.`);
   }
 }
 
 
 interface IconRendererProps extends Omit<LucideProps, 'name'> {
-  name: AvailableIconName | string | null | undefined;
-  fallbackIcon?: AvailableIconName;
+  name: AvailableIconName | string | null | undefined; // Allow any string, but will use fallback if not valid
   className?: string;
   size?: number;
   color?: string;
@@ -60,7 +67,6 @@ interface IconRendererProps extends Omit<LucideProps, 'name'> {
 
 export const IconRenderer: React.FC<IconRendererProps> = ({
   name,
-  fallbackIcon = "Tag", // Default fallback icon name from AvailableIconName
   className,
   size = 20,
   color,
@@ -72,19 +78,17 @@ export const IconRenderer: React.FC<IconRendererProps> = ({
 
   if (name && isValidIconName(name)) {
     IconComponent = TypedLucideIcons[name];
-  } else if (name) {
-    // console.warn(`IconRenderer: Invalid or unlisted icon name "${name}". Using fallback icon "${fallbackIcon}".`);
-    // Log only if the name was provided but not valid, to avoid noise for intentionally null/undefined names
+  } else {
+    // If name is provided but not valid, log a warning (optional, can be noisy)
+    // if (name) {
+    //   console.warn(`IconRenderer: Invalid or unlisted icon name "${name}". Using fallback icon "${FALLBACK_ICON}".`);
+    // }
+    IconComponent = TypedLucideIcons[FALLBACK_ICON];
   }
-
-  // If IconComponent is still undefined (e.g., name was invalid or not in availableIcons), use the fallback
+  
+  // Absolute fallback if even FALLBACK_ICON is somehow misconfigured (should not happen)
   if (!IconComponent) {
-    IconComponent = TypedLucideIcons[fallbackIcon];
-    // If even the fallbackIcon is somehow invalid (should not happen if fallbackIcon is an AvailableIconName),
-    // default to a hardcoded known icon like Tag.
-    if (!IconComponent) {
-      IconComponent = LucideIcons.Tag; // Absolute fallback
-    }
+    IconComponent = LucideIcons.Tag;
   }
   
   return (
@@ -100,35 +104,54 @@ export const IconRenderer: React.FC<IconRendererProps> = ({
 };
 
 export function getContrastingTextColor(hexColor: string | null | undefined): string {
-  if (!hexColor) return 'inherit';
+  if (!hexColor) return 'inherit'; // Default to CSS inheritance if no color
 
   const hex = hexColor.replace('#', '');
   const fullHex = hex.length === 3
     ? hex.split('').map(char => char + char).join('')
     : hex;
 
-  if (fullHex.length !== 6) return 'inherit';
+  if (fullHex.length !== 6) return 'inherit'; // Invalid hex length
 
   const r = parseInt(fullHex.substring(0, 2), 16);
   const g = parseInt(fullHex.substring(2, 4), 16);
   const b = parseInt(fullHex.substring(4, 6), 16);
 
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return 'inherit';
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return 'inherit'; // Invalid hex components
 
+  // Calculate luminance
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  
+  // Return black for light backgrounds, white for dark backgrounds
   return luminance > 0.5 ? '#000000' : '#FFFFFF';
 }
 
+// Palette for user selection, can be expanded or curated
 export const iconColorPalette = [
-  "#EF5350", "#E53935", "#EC407A", "#D81B60",
-  "#FFA726", "#FB8C00", "#FFCA28", "#FFB300", "#FFEE58",
-  "#66BB6A", "#43A047", "#9CCC65", "#7CB342",
-  "#42A5F5", "#1E88E5", "#26C6DA", "#00ACC1", "#29B6F6",
-  "#AB47BC", "#8E24AA", "#7E57C2", "#5E35B1",
-  "#8D6E63", "#6D4C41", "#757575", "#546E7A",
-  "#000000",
+  // Reds & Oranges
+  "#EF5350", "#E53935", "#D32F2F", // Reds
+  "#FFA726", "#FB8C00", "#F57C00", // Oranges
+  // Yellows & Greens
+  "#FFCA28", "#FFB300", "#FFEE58", // Yellows
+  "#66BB6A", "#43A047", "#2E7D32", // Greens
+  "#9CCC65", "#7CB342",
+  // Blues & Cyans
+  "#42A5F5", "#1E88E5", "#1565C0", // Blues
+  "#26C6DA", "#00ACC1", "#00838F", // Cyans
+  "#29B6F6",
+  // Purples & Pinks
+  "#AB47BC", "#8E24AA", "#6A1B9A", // Purples
+  "#7E57C2", "#5E35B1",
+  "#EC407A", "#D81B60", "#C2185B", // Pinks
+  // Browns & Greys
+  "#8D6E63", "#6D4C41", "#4E342E", // Browns
+  "#757575", "#546E7A", "#37474F", // Greys
+  // Black & a very dark grey (almost black)
+  "#212121", "#000000", 
 ];
 
+// These functions are kept as they might be useful for other random suggestions
+// or if the user clears a selection and wants a random pick.
 export function getRandomIcon(): AvailableIconName {
   const randomIndex = Math.floor(Math.random() * availableIcons.length);
   return availableIcons[randomIndex];
