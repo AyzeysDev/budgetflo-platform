@@ -6,7 +6,7 @@ import {
   Menu,
   PiggyBank,
   LayoutDashboard,
-  Wallet,
+  Wallet, // Icon for Budgets
   CreditCard,
   TrendingUp,
   PieChartIcon,
@@ -15,8 +15,7 @@ import {
   BotMessageSquare,
   FileText,
   Target,
-  Tags, // New icon for Categories
-  // PlusCircle,
+  Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,10 +40,11 @@ interface NavItem {
   section?: string;
 }
 
+// Updated mainNavItemsMobile to include "Budgets" under "Management"
 const mainNavItemsMobile: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
-  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
-  { href: "/categories", label: "Categories", icon: Tags, section: "Management" }, // Added Categories
+  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" }, // Added Budgets
+  { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },
   { href: "/reports", label: "Reports", icon: PieChartIcon, section: "Analysis" },
@@ -112,7 +112,6 @@ export function MobileHeader() {
                         href={item.href}
                         className={cn(
                           "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                          // More robust active link check:
                           (pathname === item.href || (item.href !== "/home" && pathname.startsWith(item.href)))
                             ? "bg-primary/10 text-primary dark:bg-primary/20"
                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-muted/50"
