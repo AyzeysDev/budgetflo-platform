@@ -12,6 +12,7 @@ export interface Category {
   type: 'income' | 'expense'; // Type of category
   icon?: string | null; // Optional: Name or identifier for an icon (e.g., from Lucide icons)
   color?: string | null; // Optional: Hex color code for UI representation
+  includeInBudget?: boolean; // Optional: Whether this category should be included in budget calculations (defaults to true)
   createdAt: Timestamp | Date | string;
   updatedAt: Timestamp | Date | string;
   isSystemCategory?: boolean; // Flag for predefined categories (e.g., "Uncategorized")
@@ -46,6 +47,7 @@ export interface CreateCategoryPayload {
   type: 'income' | 'expense';
   icon?: string | null;
   color?: string | null;
+  includeInBudget?: boolean; // Optional: Whether to include in budget calculations
 }
 
 export interface UpdateCategoryPayload {
@@ -53,6 +55,7 @@ export interface UpdateCategoryPayload {
   type?: 'income' | 'expense';
   icon?: string | null;
   color?: string | null;
+  includeInBudget?: boolean; // Optional: Whether to include in budget calculations
 }
 
 export interface CreateBudgetPayload {
@@ -87,6 +90,7 @@ export interface UpdateBudgetPayload {
 export interface CategoryDTO extends Omit<Category, 'createdAt' | 'updatedAt'> {
   createdAt: string;
   updatedAt: string;
+  includeInBudget?: boolean; // Explicitly include this in the DTO for clarity
 }
 
 export interface BudgetDTO extends Omit<Budget, 'createdAt' | 'updatedAt' | 'startDate' | 'endDate'> {

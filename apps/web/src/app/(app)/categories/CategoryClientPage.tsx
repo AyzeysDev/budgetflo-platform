@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Tags, Edit3, Trash2, AlertTriangleIcon, Filter, Grid3X3, List } from 'lucide-react';
+import { PlusCircle, Tags, Edit3, Trash2, AlertTriangleIcon, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -37,7 +38,6 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
   const [editingCategory, setEditingCategory] = useState<CategoryDTO | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<CategoryDTO | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     setCategories([...initialCategories].sort((a, b) => a.name.localeCompare(b.name)));
@@ -75,6 +75,21 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
     }
   };
 
+  // Dummy handler for budget inclusion (no API call yet)
+  const handleToggleBudgetInclusion = (categoryId: string, includeInBudget: boolean) => {
+    // Update local state only for now
+    setCategories(prev => 
+      prev.map(cat => 
+        cat.id === categoryId 
+          ? { ...cat, includeInBudget } 
+          : cat
+      )
+    );
+    
+    // Show feedback
+    toast.success(`Category ${includeInBudget ? 'included in' : 'excluded from'} budget (demo)`);
+  };
+
   const onFormSaveSuccess = (savedCategory: CategoryDTO) => {
     if (editingCategory) { 
       setCategories(prev => 
@@ -98,7 +113,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
 
   return (
     <>
-      {/* Header Section - Exact same structure as dashboard */}
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
@@ -122,10 +137,6 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
           <Button onClick={handleAddCategory}>
             <PlusCircle className="mr-2 h-4 w-4" />
             Add Category
-          </Button>
-          <Button variant="outline" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
-            {viewMode === 'grid' ? <List className="mr-2 h-4 w-4" /> : <Grid3X3 className="mr-2 h-4 w-4" />}
-            {viewMode === 'grid' ? 'List View' : 'Grid View'}
           </Button>
         </div>
       </div>
@@ -155,7 +166,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
         </DropdownMenu>
       </div>
 
-      {/* Categories Display - Using Settings Page Card Style */}
+      {/* Categories Display */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -166,154 +177,142 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
             {filteredCategories.length} {filteredCategories.length === 1 ? 'category' : 'categories'} found
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="p-6 pt-0">
           {filteredCategories.length === 0 && (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-muted flex items-center justify-center">
+            <div className="text-center py-12">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-muted flex items-center justify-center">
                 <Tags className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-sm font-medium mb-1 text-foreground">No categories found</h3>
-              <p className="text-xs text-muted-foreground mb-3">
+              <h3 className="text-lg font-medium mb-2 text-foreground">No categories found</h3>
+              <p className="text-sm text-muted-foreground mb-4">
                 {filterType !== 'all' ? 'Try adjusting your filter or ' : 'Get started by '} creating your first category.
               </p>
-              <Button onClick={handleAddCategory} size="sm" className="text-xs h-8">
-                <PlusCircle className="mr-1 h-3 w-3" />
+              <Button onClick={handleAddCategory}>
+                <PlusCircle className="mr-2 h-4 w-4" />
                 Add Category
               </Button>
             </div>
           )}
 
           {filteredCategories.length > 0 && (
-            <>
-              {viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                  {filteredCategories.map((category) => {
-                    const textColor = category.color ? getContrastingTextColor(category.color) : 'inherit';
-                    return (
+            <div className="space-y-0">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-border bg-muted/50 rounded-t-lg">
+                <div className="col-span-1 text-xs font-medium text-muted-foreground">
+                  Icon
+                </div>
+                <div className="col-span-4 text-xs font-medium text-muted-foreground">
+                  Name
+                </div>
+                <div className="col-span-2 text-xs font-medium text-muted-foreground">
+                  Type
+                </div>
+                <div className="col-span-3 text-xs font-medium text-muted-foreground">
+                  Include in Budget?
+                </div>
+                <div className="col-span-2 text-xs font-medium text-muted-foreground">
+                  Actions
+                </div>
+              </div>
+              
+              {/* Table Rows */}
+              {filteredCategories.map((category, index) => {
+                const textColor = category.color ? getContrastingTextColor(category.color) : 'inherit';
+                // Default to true if includeInBudget is undefined
+                const isIncludedInBudget = category.includeInBudget !== false;
+                
+                return (
+                  <div 
+                    key={category.id}
+                    className={cn(
+                      "grid grid-cols-12 gap-3 px-4 py-3 border-b border-border/50 hover:bg-muted/30 transition-colors duration-150",
+                      index === filteredCategories.length - 1 && "border-b-0 rounded-b-lg"
+                    )}
+                  >
+                    {/* Icon */}
+                    <div className="col-span-1 flex items-center">
                       <div 
-                        key={category.id} 
-                        className={cn(
-                          "group relative p-3 bg-muted/30 rounded-lg border transition-all duration-200 hover:shadow-md",
-                          category.isSystemCategory 
-                            ? "opacity-75" 
-                            : "hover:border-primary/50"
+                        className="w-7 h-7 rounded-md flex items-center justify-center shadow-sm"
+                        style={{ backgroundColor: category.color || '#6B7280' }}
+                      >
+                        <IconRenderer 
+                          name={category.icon as AvailableIconName | null} 
+                          className="w-4 h-4" 
+                          style={{ color: textColor }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Name */}
+                    <div className="col-span-4 flex items-center">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm text-foreground">{category.name}</span>
+                        {category.isSystemCategory && (
+                          <Badge variant="outline" className="text-xs w-fit mt-1">
+                            System Category
+                          </Badge>
                         )}
-                      >
-                        <div className="text-center">
-                          <div 
-                            className="w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-2"
-                            style={{ backgroundColor: category.color || '#6B7280' }}
-                          >
-                            <IconRenderer 
-                              name={category.icon as AvailableIconName | null} 
-                              className="w-5 h-5" 
-                              style={{ color: textColor }}
-                            />
-                          </div>
-                          <h3 className="font-medium text-xs mb-1 truncate text-foreground" title={category.name}>
-                            {category.name}
-                          </h3>
-                          <div className="flex justify-center gap-1">
-                            <Badge 
-                              variant={category.type === 'income' ? 'default' : 'secondary'}
-                              className="text-xs px-1 py-0"
-                            >
-                              {category.type}
-                            </Badge>
-                            {category.isSystemCategory && (
-                              <Badge variant="outline" className="text-xs px-1 py-0">
-                                System
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEditCategory(category)} 
-                            disabled={category.isSystemCategory}
-                            className="h-6 w-6 p-0 hover:bg-primary/10"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => setCategoryToDelete(category)} 
-                            disabled={category.isSystemCategory}
-                            className="h-6 w-6 p-0 hover:bg-destructive/10 text-destructive"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredCategories.map((category) => {
-                    const textColor = category.color ? getContrastingTextColor(category.color) : 'inherit';
-                    return (
-                      <div 
-                        key={category.id}
-                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border text-sm"
+                    </div>
+                    
+                    {/* Type */}
+                    <div className="col-span-2 flex items-center">
+                      <Badge 
+                        variant={category.type === 'income' ? 'default' : 'secondary'}
+                        className="text-xs"
                       >
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="w-8 h-8 rounded-lg flex items-center justify-center"
-                            style={{ backgroundColor: category.color || '#6B7280' }}
-                          >
-                            <IconRenderer 
-                              name={category.icon as AvailableIconName | null} 
-                              className="w-4 h-4" 
-                              style={{ color: textColor }}
-                            />
-                          </div>
-                          <div>
-                            <h3 className="font-medium text-foreground">{category.name}</h3>
-                            <div className="flex gap-2 mt-1">
-                              <Badge 
-                                variant={category.type === 'income' ? 'default' : 'secondary'}
-                                className="text-xs"
-                              >
-                                {category.type}
-                              </Badge>
-                              {category.isSystemCategory && (
-                                <Badge variant="outline" className="text-xs">System</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEditCategory(category)} 
-                            disabled={category.isSystemCategory}
-                            className="h-8 w-8 p-0 hover:bg-primary/10"
-                          >
-                            <Edit3 className="w-4 h-4 text-muted-foreground" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => setCategoryToDelete(category)} 
-                            disabled={category.isSystemCategory}
-                            className="h-8 w-8 p-0 hover:bg-destructive/10"
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
+                        {category.type}
+                      </Badge>
+                    </div>
+                    
+                    {/* Include in Budget */}
+                    <div className="col-span-3 flex items-center">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`budget-${category.id}`}
+                          checked={isIncludedInBudget}
+                          onCheckedChange={(checked) => 
+                            handleToggleBudgetInclusion(category.id, checked as boolean)
+                          }
+                          disabled={category.isSystemCategory}
+                          className="h-4 w-4"
+                        />
+                        <label 
+                          htmlFor={`budget-${category.id}`}
+                          className="text-xs text-muted-foreground cursor-pointer select-none"
+                        >
+                          {isIncludedInBudget ? 'Yes' : 'No'}
+                        </label>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="col-span-2 flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleEditCategory(category)} 
+                        disabled={category.isSystemCategory}
+                        className="h-8 w-8 p-0 hover:bg-primary/10"
+                        title="Edit category"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setCategoryToDelete(category)} 
+                        disabled={category.isSystemCategory}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        title="Delete category"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
