@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import type { CategoryDTO, CreateCategoryPayload, UpdateCategoryPayload } from '@/../../api/src/models/budget.model';
-import { Loader2, Palette, Check, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Palette, Check, TrendingUp, TrendingDown, Calculator } from 'lucide-react';
 import {
   availableIcons,
   IconRenderer,
@@ -34,22 +35,26 @@ import {
 } from './categoryUtils';
 import { cn } from '@/lib/utils';
 
+// ...existing code...
+
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
   type: z.enum(['income', 'expense'], { required_error: "Type is required" }),
   icon: z.string().optional().nullable().transform(val => (val === "" ? null : val)),
   color: z.string()
-    .nullable()
     .optional()
     .nullable()
     .transform(val => (val === "" ? null : val))
     .refine(val => {
-        if (val === null) return true;
+        if (val === null || val === undefined) return true;
         return /^#([0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(val as string);
       }, {
       message: "Invalid hex color (e.g., #RRGGBB)",
     }),
+  includeInBudget: z.boolean(),
 });
+
+// ...rest of the code remains the same...
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
@@ -88,12 +93,14 @@ export default function CategoryForm({
       type: 'expense',
       icon: DEFAULT_EXPENSE_ICON,
       color: DEFAULT_EXPENSE_COLOR,
+      includeInBudget: true,
     },
   });
 
   const watchedType = watch("type");
   const watchedIcon = watch("icon");
   const watchedColor = watch("color");
+  const watchedIncludeInBudget = watch("includeInBudget");
 
   useEffect(() => {
     if (isOpen) {
@@ -103,6 +110,7 @@ export default function CategoryForm({
           type: categoryToEdit.type,
           icon: isValidIconName(categoryToEdit.icon) ? categoryToEdit.icon : (categoryToEdit.type === 'income' ? DEFAULT_INCOME_ICON : DEFAULT_EXPENSE_ICON),
           color: categoryToEdit.color || (categoryToEdit.type === 'income' ? DEFAULT_INCOME_COLOR : DEFAULT_EXPENSE_COLOR),
+          includeInBudget: categoryToEdit.includeInBudget !== false, // Default to true if undefined
         });
       } else {
         reset({
@@ -110,6 +118,7 @@ export default function CategoryForm({
           type: 'expense',
           icon: DEFAULT_EXPENSE_ICON,
           color: DEFAULT_EXPENSE_COLOR,
+          includeInBudget: true,
         });
       }
     }
@@ -139,9 +148,16 @@ export default function CategoryForm({
           type: categoryToEdit.type,
           icon: isValidIconName(categoryToEdit.icon) ? categoryToEdit.icon : (categoryToEdit.type === 'income' ? DEFAULT_INCOME_ICON : DEFAULT_EXPENSE_ICON),
           color: categoryToEdit.color || (categoryToEdit.type === 'income' ? DEFAULT_INCOME_COLOR : DEFAULT_EXPENSE_COLOR),
+          includeInBudget: categoryToEdit.includeInBudget !== false,
         });
       } else {
-        reset({ name: '', type: 'expense', icon: DEFAULT_EXPENSE_ICON, color: DEFAULT_EXPENSE_COLOR });
+        reset({ 
+          name: '', 
+          type: 'expense', 
+          icon: DEFAULT_EXPENSE_ICON, 
+          color: DEFAULT_EXPENSE_COLOR,
+          includeInBudget: true,
+        });
       }
     }
     onOpenChange(open);
@@ -153,6 +169,7 @@ export default function CategoryForm({
       type: data.type,
       icon: (data.icon as AvailableIconName | null) ?? (data.type === 'income' ? DEFAULT_INCOME_ICON : DEFAULT_EXPENSE_ICON),
       color: data.color ?? (data.type === 'income' ? DEFAULT_INCOME_COLOR : DEFAULT_EXPENSE_COLOR),
+      includeInBudget: data.includeInBudget,
     };
 
     const urlBase = `/api/categories`;
@@ -198,7 +215,7 @@ export default function CategoryForm({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg w-[95vw] max-h-[85vh] p-0 gap-0 bg-background border border-border shadow-xl rounded-2xl overflow-hidden">
+      <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90vh] p-0 gap-0 bg-background border border-border shadow-xl rounded-2xl overflow-hidden">
         {/* Clean Header */}
         <DialogHeader className="px-6 py-4 border-b border-border">
           <div>
@@ -211,7 +228,7 @@ export default function CategoryForm({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 max-h-[calc(85vh-160px)]">
+        <ScrollArea className="flex-1 max-h-[calc(90vh-160px)]">
           <form id="category-form" onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
             {/* Category Name */}
             <div className="space-y-2">
@@ -303,6 +320,43 @@ export default function CategoryForm({
               )}
             </div>
 
+            {/* Include in Budget Option */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                <Calculator className="w-4 h-4" />
+                Budget Settings
+              </Label>
+              <div className="p-4 rounded-xl border border-border bg-muted/30">
+                <Controller
+                  name="includeInBudget"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id="includeInBudget"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isSubmitting}
+                        className="h-4 w-4 mt-0.5"
+                      />
+                      <div className="flex flex-col space-y-1">
+                        <label 
+                          htmlFor="includeInBudget"
+                          className="text-sm font-medium text-foreground cursor-pointer leading-tight"
+                        >
+                          Include in Budget Calculations
+                        </label>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          When enabled, this category will be included in budget reports and calculations. 
+                          Disable for categories you want to track but exclude from budget planning.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                />
+              </div>
+            </div>
+
             {/* Preview */}
             <div className="space-y-3">
               <Label className="text-sm font-medium text-foreground">Preview</Label>
@@ -318,16 +372,35 @@ export default function CategoryForm({
                       color={getContrastingTextColor(previewColor)} 
                     />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <div className="font-medium text-sm text-foreground" style={{ color: previewColor }}>
                       {watch('name') || 'Category Name'}
                     </div>
-                    <Badge 
-                      variant={watchedType === 'income' ? 'default' : 'destructive'}
-                      className="text-xs mt-1"
-                    >
-                      {watchedType === 'income' ? 'Income' : 'Expense'}
-                    </Badge>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge 
+                        variant={watchedType === 'income' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {watchedType === 'income' ? 'Income' : 'Expense'}
+                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <div 
+                          className={cn(
+                            "w-3 h-3 rounded border flex items-center justify-center",
+                            watchedIncludeInBudget 
+                              ? "bg-primary border-primary" 
+                              : "border-muted-foreground"
+                          )}
+                        >
+                          {watchedIncludeInBudget && (
+                            <div className="w-1.5 h-1.5 bg-white rounded-sm" />
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {watchedIncludeInBudget ? 'In Budget' : 'Not in Budget'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

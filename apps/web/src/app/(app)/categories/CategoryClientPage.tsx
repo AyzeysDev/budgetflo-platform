@@ -5,7 +5,6 @@ import { PlusCircle, Tags, Edit3, Trash2, AlertTriangleIcon, Filter } from 'luci
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -73,21 +72,6 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
     } finally {
       setCategoryToDelete(null);
     }
-  };
-
-  // Dummy handler for budget inclusion (no API call yet)
-  const handleToggleBudgetInclusion = (categoryId: string, includeInBudget: boolean) => {
-    // Update local state only for now
-    setCategories(prev => 
-      prev.map(cat => 
-        cat.id === categoryId 
-          ? { ...cat, includeInBudget } 
-          : cat
-      )
-    );
-    
-    // Show feedback
-    toast.success(`Category ${includeInBudget ? 'included in' : 'excluded from'} budget (demo)`);
   };
 
   const onFormSaveSuccess = (savedCategory: CategoryDTO) => {
@@ -198,20 +182,23 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
             <div className="space-y-0">
               {/* Table Header */}
               <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-border bg-muted/50 rounded-t-lg">
-                <div className="col-span-1 text-xs font-medium text-muted-foreground">
+                <div className="col-span-1 text-xs font-medium text-muted-foreground text-center">
                   Icon
                 </div>
-                <div className="col-span-4 text-xs font-medium text-muted-foreground">
+                <div className="col-span-3 text-xs font-medium text-muted-foreground text-center">
                   Name
                 </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground">
+                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
                   Type
                 </div>
-                <div className="col-span-3 text-xs font-medium text-muted-foreground">
+                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
                   Include in Budget?
                 </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground">
-                  Actions
+                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
+                  Edit
+                </div>
+                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
+                  Delete
                 </div>
               </div>
               
@@ -230,7 +217,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                     )}
                   >
                     {/* Icon */}
-                    <div className="col-span-1 flex items-center">
+                    <div className="col-span-1 flex items-center justify-center">
                       <div 
                         className="w-7 h-7 rounded-md flex items-center justify-center shadow-sm"
                         style={{ backgroundColor: category.color || '#6B7280' }}
@@ -244,7 +231,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                     </div>
                     
                     {/* Name */}
-                    <div className="col-span-4 flex items-center">
+                    <div className="col-span-3 flex items-center justify-center">
                       <div className="flex flex-col">
                         <span className="font-medium text-sm text-foreground">{category.name}</span>
                         {category.isSystemCategory && (
@@ -256,7 +243,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                     </div>
                     
                     {/* Type */}
-                    <div className="col-span-2 flex items-center">
+                    <div className="col-span-2 flex items-center justify-center">
                       <Badge 
                         variant={category.type === 'income' ? 'default' : 'destructive'}
                         className="text-xs"
@@ -265,29 +252,29 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                       </Badge>
                     </div>
                     
-                    {/* Include in Budget */}
-                    <div className="col-span-3 flex items-center">
+                    {/* Include in Budget - Read Only Display */}
+                    <div className="col-span-2 flex items-center justify-center">
                       <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`budget-${category.id}`}
-                          checked={isIncludedInBudget}
-                          onCheckedChange={(checked) => 
-                            handleToggleBudgetInclusion(category.id, checked as boolean)
-                          }
-                          disabled={category.isSystemCategory}
-                          className="h-4 w-4"
-                        />
-                        <label 
-                          htmlFor={`budget-${category.id}`}
-                          className="text-xs text-muted-foreground cursor-pointer select-none"
+                        <div 
+                          className={cn(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center",
+                            isIncludedInBudget 
+                              ? "bg-primary border-primary" 
+                              : "border-muted-foreground"
+                          )}
                         >
+                          {isIncludedInBudget && (
+                            <div className="w-2 h-2 bg-white rounded-sm" />
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
                           {isIncludedInBudget ? 'Yes' : 'No'}
-                        </label>
+                        </span>
                       </div>
                     </div>
                     
-                    {/* Actions */}
-                    <div className="col-span-2 flex items-center gap-1">
+                    {/* Edit */}
+                    <div className="col-span-2 flex items-center justify-center">
                       <Button 
                         variant="ghost" 
                         size="sm"
@@ -298,6 +285,10 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                       >
                         <Edit3 className="w-4 h-4" />
                       </Button>
+                    </div>
+                    
+                    {/* Delete */}
+                    <div className="col-span-2 flex items-center justify-center">
                       <Button 
                         variant="ghost" 
                         size="sm"

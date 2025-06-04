@@ -29,6 +29,7 @@ const getCategoriesCollection = (): CollectionReference<Category> => {
  * @param categoryData The category data object from Firestore.
  * @returns A category DTO with timestamps converted to ISO strings.
  */
+// Update the convertCategoryToDTO function
 function convertCategoryToDTO(categoryData: Category | undefined): CategoryDTO | null {
   if (!categoryData) return null;
 
@@ -37,20 +38,19 @@ function convertCategoryToDTO(categoryData: Category | undefined): CategoryDTO |
     userId: categoryData.userId,
     name: categoryData.name,
     type: categoryData.type,
-    icon: categoryData.icon || null, // Ensure null if undefined
-    color: categoryData.color || null, // Ensure null if undefined
-    isSystemCategory: categoryData.isSystemCategory || false, // Default to false if undefined
+    icon: categoryData.icon || null,
+    color: categoryData.color || null,
+    includeInBudget: categoryData.includeInBudget !== false, // Default to true if undefined
+    isSystemCategory: categoryData.isSystemCategory || false,
     createdAt: categoryData.createdAt instanceof Timestamp ? categoryData.createdAt.toDate().toISOString() : String(categoryData.createdAt),
     updatedAt: categoryData.updatedAt instanceof Timestamp ? categoryData.updatedAt.toDate().toISOString() : String(categoryData.updatedAt),
   };
 }
 
-/**
- * Creates a new category for a user.
- */
+// Update the createCategory function
 export async function createCategory(userId: string, payload: CreateCategoryPayload): Promise<CategoryDTO | null> {
   const categoriesCollection = getCategoriesCollection();
-  const now = FieldValue.serverTimestamp() as Timestamp; // Firestore server timestamp
+  const now = FieldValue.serverTimestamp() as Timestamp;
   const newCategoryRef = categoriesCollection.doc();
 
   const categoryData: Category = {
@@ -58,16 +58,16 @@ export async function createCategory(userId: string, payload: CreateCategoryPayl
     userId: userId,
     name: payload.name,
     type: payload.type,
-    icon: payload.icon || null, // Ensure null if not provided
-    color: payload.color || null, // Ensure null if not provided
+    icon: payload.icon || null,
+    color: payload.color || null,
+    includeInBudget: payload.includeInBudget, // Add this field
     createdAt: now,
     updatedAt: now,
-    isSystemCategory: false, // User-created categories are never system categories
+    isSystemCategory: false,
   };
 
   try {
     await newCategoryRef.set(categoryData);
-    // Fetch the newly created document to get server-generated timestamps correctly resolved
     const docSnapshot = await newCategoryRef.get();
     return convertCategoryToDTO(docSnapshot.data() as Category | undefined);
   } catch (error) {
@@ -138,6 +138,7 @@ export async function getCategoryById(categoryId: string, userId: string): Promi
 /**
  * Updates an existing category for a user. System categories cannot be modified.
  */
+// Update the updateCategory function
 export async function updateCategory(categoryId: string, userId: string, payload: UpdateCategoryPayload): Promise<CategoryDTO | null> {
   const categoriesCollection = getCategoriesCollection();
   const categoryRef = categoriesCollection.doc(categoryId);
@@ -145,7 +146,7 @@ export async function updateCategory(categoryId: string, userId: string, payload
   try {
     const doc = await categoryRef.get();
     if (!doc.exists) {
-      return null; // Category not found
+      return null;
     }
 
     const existingCategory = doc.data() as Category;
@@ -156,7 +157,6 @@ export async function updateCategory(categoryId: string, userId: string, payload
       throw new Error("System categories cannot be modified.");
     }
 
-    // Construct the update object, only including fields that are actually in the payload
     const dataToUpdate: Partial<Record<keyof UpdateCategoryPayload, any>> & { updatedAt: Timestamp } = {
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
@@ -170,7 +170,6 @@ export async function updateCategory(categoryId: string, userId: string, payload
       dataToUpdate.type = payload.type;
       hasChanges = true;
     }
-    // Handle icon and color: allow setting to null
     if (payload.icon !== undefined && payload.icon !== existingCategory.icon) {
       dataToUpdate.icon = payload.icon === "" ? null : payload.icon;
       hasChanges = true;
@@ -179,10 +178,15 @@ export async function updateCategory(categoryId: string, userId: string, payload
       dataToUpdate.color = payload.color === "" ? null : payload.color;
       hasChanges = true;
     }
+    // Add includeInBudget field handling
+    if (payload.includeInBudget !== undefined && payload.includeInBudget !== existingCategory.includeInBudget) {
+      dataToUpdate.includeInBudget = payload.includeInBudget;
+      hasChanges = true;
+    }
     
     if (!hasChanges) {
         console.log("No actual changes to update for category:", categoryId);
-        return convertCategoryToDTO(existingCategory); // Return existing if no functional changes
+        return convertCategoryToDTO(existingCategory);
     }
 
     await categoryRef.update(dataToUpdate);
@@ -191,7 +195,7 @@ export async function updateCategory(categoryId: string, userId: string, payload
   } catch (error) {
     console.error(`Error updating category ${categoryId}:`, error);
     if (error instanceof Error && (error.message.includes("Unauthorized") || error.message.includes("System categories"))) {
-      throw error; // Re-throw specific, known errors
+      throw error;
     }
     throw new Error("Failed to update category due to a server error.");
   }
@@ -233,10 +237,10 @@ export async function deleteCategory(categoryId: string, userId: string): Promis
  * Seeds default categories for a new user if they don't have any.
  * Uses a batch write for efficiency.
  */
+// Update the seedDefaultCategoriesForUser function
 export async function seedDefaultCategoriesForUser(userId: string): Promise<void> {
   const categoriesCollection = getCategoriesCollection();
 
-  // Check if user already has categories to prevent re-seeding
   const userCategoriesQuery = categoriesCollection.where('userId', '==', userId).limit(1);
   const snapshot = await userCategoriesQuery.get();
 
@@ -246,41 +250,41 @@ export async function seedDefaultCategoriesForUser(userId: string): Promise<void
   }
 
   const defaultCategories: Array<Omit<Category, 'id' | 'userId' | 'createdAt' | 'updatedAt'>> = [
-    { name: 'Salary', type: 'income', icon: 'Landmark', color: '#4CAF50', isSystemCategory: true },
-    { name: 'Freelance Income', type: 'income', icon: 'Briefcase', color: '#8BC34A', isSystemCategory: true },
-    { name: 'Investments', type: 'income', icon: 'TrendingUp', color: '#CDDC39', isSystemCategory: true },
-    { name: 'Gifts Received', type: 'income', icon: 'Gift', color: '#FFEB3B', isSystemCategory: true },
+    { name: 'Salary', type: 'income', icon: 'Landmark', color: '#4CAF50', includeInBudget: true, isSystemCategory: true },
+    { name: 'Freelance Income', type: 'income', icon: 'Briefcase', color: '#8BC34A', includeInBudget: true, isSystemCategory: true },
+    { name: 'Investments', type: 'income', icon: 'TrendingUp', color: '#CDDC39', includeInBudget: true, isSystemCategory: true },
+    { name: 'Gifts Received', type: 'income', icon: 'Gift', color: '#FFEB3B', includeInBudget: false, isSystemCategory: true }, // Example: gifts might not be budgeted
     
-    { name: 'Housing', type: 'expense', icon: 'Home', color: '#F44336', isSystemCategory: true },
-    { name: 'Rent/Mortgage', type: 'expense', icon: 'KeyRound', color: '#E53935', isSystemCategory: true },
-    { name: 'Utilities', type: 'expense', icon: 'Lightbulb', color: '#FF9800', isSystemCategory: true },
-    { name: 'Groceries', type: 'expense', icon: 'ShoppingCart', color: '#FFC107', isSystemCategory: true },
-    { name: 'Dining Out', type: 'expense', icon: 'Utensils', color: '#FF5722', isSystemCategory: true },
-    { name: 'Transportation', type: 'expense', icon: 'Car', color: '#795548', isSystemCategory: true },
-    { name: 'Fuel/Gas', type: 'expense', icon: 'Fuel', color: '#9E9E9E', isSystemCategory: true },
-    { name: 'Public Transport', type: 'expense', icon: 'Bus', color: '#607D8B', isSystemCategory: true },
-    { name: 'Healthcare', type: 'expense', icon: 'HeartPulse', color: '#E91E63', isSystemCategory: true },
-    { name: 'Medication', type: 'expense', icon: 'Pill', color: '#EC407A', isSystemCategory: true },
-    { name: 'Personal Care', type: 'expense', icon: 'Sparkles', color: '#9C27B0', isSystemCategory: true }, // Using 'Sparkles' as a generic personal care icon
-    { name: 'Entertainment', type: 'expense', icon: 'Gamepad2', color: '#673AB7', isSystemCategory: true },
-    { name: 'Subscriptions', type: 'expense', icon: 'Youtube', color: '#3F51B5', isSystemCategory: true }, // Changed from Tv2 to Youtube for more modern take
-    { name: 'Shopping/Clothing', type: 'expense', icon: 'Shirt', color: '#2196F3', isSystemCategory: true }, // Changed from Package to Shirt
-    { name: 'Education', type: 'expense', icon: 'GraduationCap', color: '#03A9F4', isSystemCategory: true },
-    { name: 'Childcare', type: 'expense', icon: 'Baby', color: '#00BCD4', isSystemCategory: true },
-    { name: 'Pets', type: 'expense', icon: 'Dog', color: '#009688', isSystemCategory: true },
-    { name: 'Savings Transfer', type: 'expense', icon: 'PiggyBank', color: '#43A047', isSystemCategory: true }, // For transfers out to savings
-    { name: 'Debt Payment', type: 'expense', icon: 'CreditCard', color: '#7CB342', isSystemCategory: true },
-    { name: 'Gifts Given', type: 'expense', icon: 'Gift', color: '#D81B60', isSystemCategory: true },
-    { name: 'Travel', type: 'expense', icon: 'Plane', color: '#5E35B1', isSystemCategory: true },
-    { name: 'Miscellaneous', type: 'expense', icon: 'Package', color: '#757575', isSystemCategory: true },
-    { name: 'Uncategorized', type: 'expense', icon: 'HelpCircle', color: '#BDBDBD', isSystemCategory: true },
+    { name: 'Housing', type: 'expense', icon: 'Home', color: '#F44336', includeInBudget: true, isSystemCategory: true },
+    { name: 'Rent/Mortgage', type: 'expense', icon: 'KeyRound', color: '#E53935', includeInBudget: true, isSystemCategory: true },
+    { name: 'Utilities', type: 'expense', icon: 'Lightbulb', color: '#FF9800', includeInBudget: true, isSystemCategory: true },
+    { name: 'Groceries', type: 'expense', icon: 'ShoppingCart', color: '#FFC107', includeInBudget: true, isSystemCategory: true },
+    { name: 'Dining Out', type: 'expense', icon: 'Utensils', color: '#FF5722', includeInBudget: true, isSystemCategory: true },
+    { name: 'Transportation', type: 'expense', icon: 'Car', color: '#795548', includeInBudget: true, isSystemCategory: true },
+    { name: 'Fuel/Gas', type: 'expense', icon: 'Fuel', color: '#9E9E9E', includeInBudget: true, isSystemCategory: true },
+    { name: 'Public Transport', type: 'expense', icon: 'Bus', color: '#607D8B', includeInBudget: true, isSystemCategory: true },
+    { name: 'Healthcare', type: 'expense', icon: 'HeartPulse', color: '#E91E63', includeInBudget: true, isSystemCategory: true },
+    { name: 'Medication', type: 'expense', icon: 'Pill', color: '#EC407A', includeInBudget: true, isSystemCategory: true },
+    { name: 'Personal Care', type: 'expense', icon: 'Sparkles', color: '#9C27B0', includeInBudget: true, isSystemCategory: true },
+    { name: 'Entertainment', type: 'expense', icon: 'Gamepad2', color: '#673AB7', includeInBudget: true, isSystemCategory: true },
+    { name: 'Subscriptions', type: 'expense', icon: 'Youtube', color: '#3F51B5', includeInBudget: true, isSystemCategory: true },
+    { name: 'Shopping/Clothing', type: 'expense', icon: 'Shirt', color: '#2196F3', includeInBudget: true, isSystemCategory: true },
+    { name: 'Education', type: 'expense', icon: 'GraduationCap', color: '#03A9F4', includeInBudget: true, isSystemCategory: true },
+    { name: 'Childcare', type: 'expense', icon: 'Baby', color: '#00BCD4', includeInBudget: true, isSystemCategory: true },
+    { name: 'Pets', type: 'expense', icon: 'Dog', color: '#009688', includeInBudget: true, isSystemCategory: true },
+    { name: 'Savings Transfer', type: 'expense', icon: 'PiggyBank', color: '#43A047', includeInBudget: false, isSystemCategory: true }, // Savings transfers often excluded from budget
+    { name: 'Debt Payment', type: 'expense', icon: 'CreditCard', color: '#7CB342', includeInBudget: true, isSystemCategory: true },
+    { name: 'Gifts Given', type: 'expense', icon: 'Gift', color: '#D81B60', includeInBudget: false, isSystemCategory: true }, // Gifts might be irregular
+    { name: 'Travel', type: 'expense', icon: 'Plane', color: '#5E35B1', includeInBudget: false, isSystemCategory: true }, // Travel might be irregular
+    { name: 'Miscellaneous', type: 'expense', icon: 'Package', color: '#757575', includeInBudget: true, isSystemCategory: true },
+    { name: 'Uncategorized', type: 'expense', icon: 'HelpCircle', color: '#BDBDBD', includeInBudget: true, isSystemCategory: true },
   ];
 
   const batch = (firestore as Firestore).batch();
   const now = FieldValue.serverTimestamp() as Timestamp;
 
   defaultCategories.forEach(cat => {
-    const newCatRef = (categoriesCollection as CollectionReference<Category>).doc(); // categoriesCollection is checked
+    const newCatRef = (categoriesCollection as CollectionReference<Category>).doc();
     const categoryData: Category = {
       ...cat,
       id: newCatRef.id,
@@ -296,6 +300,5 @@ export async function seedDefaultCategoriesForUser(userId: string): Promise<void
     console.log(`Default categories seeded successfully for user ${userId}`);
   } catch (error) {
     console.error(`Error seeding default categories for user ${userId}:`, error);
-    // This is not critical enough to halt user creation, but should be logged.
   }
 }

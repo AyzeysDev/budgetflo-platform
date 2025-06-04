@@ -25,9 +25,9 @@ if (!expressApiUrl) {
 }
 
 interface Context {
-  params: {
+  params: Promise<{
     categoryId: string;
-  };
+  }>;
 }
 
 export async function GET(req: NextRequest, { params }: Context) {
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { categoryId } = params;
+  const { categoryId } = await params;
   if (!categoryId || typeof categoryId !== 'string') {
     return NextResponse.json({ error: "Invalid Category ID parameter." }, { status: 400 });
   }
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, { params }: Context) {
       method: 'GET',
       headers: { 
         'Content-Type': 'application/json',
-        'X-Authenticated-User-Id': userId, // Added header back
+        'X-Authenticated-User-Id': userId,
       },
       cache: 'no-store',
     });
@@ -90,7 +90,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { categoryId } = params;
+  const { categoryId } = await params;
   if (!categoryId || typeof categoryId !== 'string') {
     return NextResponse.json({ error: "Invalid Category ID parameter." }, { status: 400 });
   }
@@ -111,7 +111,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
-        'X-Authenticated-User-Id': userId, // Added header back
+        'X-Authenticated-User-Id': userId,
       },
       body: JSON.stringify(payload),
     });
@@ -148,7 +148,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { categoryId } = params;
+  const { categoryId } = await params;
   if (!categoryId || typeof categoryId !== 'string') {
     return NextResponse.json({ error: "Invalid Category ID parameter." }, { status: 400 });
   }
@@ -161,7 +161,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
       method: 'DELETE',
       headers: { 
         'Content-Type': 'application/json',
-        'X-Authenticated-User-Id': userId, // Added header back
+        'X-Authenticated-User-Id': userId,
       },
     });
 
