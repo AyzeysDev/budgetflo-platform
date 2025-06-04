@@ -150,17 +150,17 @@ router.delete(
   })
 );
 
-router.post(
-  '/seed-defaults',
-  asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.params.userId;
-     if (!userId) {
-        res.status(400).json({ error: "User ID is missing from the route parameters." });
-        return;
-    }
-    await categoryService.seedDefaultCategoriesForUser(userId);
-    res.status(200).json({ message: `Default categories seeding process initiated for user ${userId}.` });
-  })
-);
+// router.post(
+//   '/seed-defaults',
+//   asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+//     const userId = req.params.userId;
+//      if (!userId) {
+//         res.status(400).json({ error: "User ID is missing from the route parameters." });
+//         return;
+//     }
+//     await categoryService.seedDefaultCategoriesForUser(userId);
+//     res.status(200).json({ message: `Default categories seeding process initiated for user ${userId}.` });
+//   })
+// );
 
 export default router;

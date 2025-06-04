@@ -8,7 +8,7 @@ import {
   UserProfileView 
 } from '../models/user.model';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { seedDefaultCategoriesForUser } from './categoryService'; // Import category seeding function
+// import { seedDefaultCategoriesForUser } from './categoryService'; // Import category seeding function
 
 if (!firebaseInitialized || !firestore) {
   console.error("UserService: Firebase is not initialized. User operations will fail.");
@@ -83,12 +83,12 @@ export async function syncUser(syncPayload: UserSyncPayload): Promise<{ userId: 
     console.log(`UserService (syncUser): New user account created: ${id}.`);
 
     // Seed default categories for new user
-    try {
-      await seedDefaultCategoriesForUser(id);
-    } catch (seedError) {
-      console.error(`UserService (syncUser): Failed to seed categories for new user ${id}:`, seedError);
-      // Continue with user sync even if category seeding fails, but log the error.
-    }
+    // try {
+    //   await seedDefaultCategoriesForUser(id);
+    // } catch (seedError) {
+    //   console.error(`UserService (syncUser): Failed to seed categories for new user ${id}:`, seedError);
+    //   // Continue with user sync even if category seeding fails, but log the error.
+    // }
 
   } else {
     operation = 'updated';
