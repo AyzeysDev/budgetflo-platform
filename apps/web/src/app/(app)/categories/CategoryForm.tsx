@@ -323,7 +323,7 @@ export default function CategoryForm({
                       {watch('name') || 'Category Name'}
                     </div>
                     <Badge 
-                      variant={watchedType === 'income' ? 'default' : 'secondary'}
+                      variant={watchedType === 'income' ? 'default' : 'destructive'}
                       className="text-xs mt-1"
                     >
                       {watchedType === 'income' ? 'Income' : 'Expense'}

@@ -258,7 +258,7 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
                     {/* Type */}
                     <div className="col-span-2 flex items-center">
                       <Badge 
-                        variant={category.type === 'income' ? 'default' : 'secondary'}
+                        variant={category.type === 'income' ? 'default' : 'destructive'}
                         className="text-xs"
                       >
                         {category.type}
