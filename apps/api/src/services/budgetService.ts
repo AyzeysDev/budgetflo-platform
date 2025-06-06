@@ -22,7 +22,6 @@ const getBudgetsCollection = (): CollectionReference<Budget> => {
   return firestore.collection('budgets') as CollectionReference<Budget>;
 };
 
-
 /**
  * Converts Firestore Timestamps in a budget object to ISO date strings.
  * Ensures default for isOverall.
@@ -81,7 +80,6 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
   }
   // For overall budgets, categoryIdForDb remains null
 
-
   const newBudgetRef = budgetsCollection.doc();
   const budgetData: Budget = {
     id: newBudgetRef.id,
@@ -126,7 +124,7 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
 
 /**
  * Retrieves all budgets for a specific user.
- * Can filter by isOverall flag.
+ * Ultra-simplified to completely avoid Firestore index requirements.
  */
 export async function getBudgetsByUserId(
   userId: string,
@@ -134,34 +132,61 @@ export async function getBudgetsByUserId(
 ): Promise<BudgetDTO[]> {
   const budgetsCollection = getBudgetsCollection();
   try {
-    let query: FirebaseFirestore.Query<Budget> = budgetsCollection.where('userId', '==', userId);
-
-    if (options?.isOverall !== undefined) {
-      query = query.where('isOverall', '==', options.isOverall);
-    }
-    if (options?.period) {
-      query = query.where('period', '==', options.period);
-    }
-
-    if (options?.activeOnly) {
-      const now = Timestamp.now();
-      query = query.where('endDate', '>=', now).where('startDate', '<=', now);
-    } else if (options?.year && options?.month) { // Month is 1-12
-        const startDate = Timestamp.fromDate(new Date(options.year, options.month - 1, 1));
-        const endDate = Timestamp.fromDate(new Date(options.year, options.month, 0, 23, 59, 59, 999)); // Last moment of the month
-        query = query.where('startDate', '>=', startDate).where('startDate', '<=', endDate);
-    } else if (options?.year) {
-        const startDate = Timestamp.fromDate(new Date(options.year, 0, 1));
-        const endDate = Timestamp.fromDate(new Date(options.year, 11, 31, 23, 59, 59, 999));
-        query = query.where('startDate', '>=', startDate).where('startDate', '<=', endDate);
-    }
-
-    const snapshot = await query.orderBy('isOverall', 'desc').orderBy('startDate', 'desc').orderBy('name', 'asc').get();
+    // Use only the most basic query - just userId to avoid any index requirements
+    const query = budgetsCollection.where('userId', '==', userId);
+    const snapshot = await query.get();
 
     if (snapshot.empty) {
       return [];
     }
-    return snapshot.docs.map(doc => convertBudgetToDTO(doc.data())).filter(Boolean) as BudgetDTO[];
+    
+    // Get all budgets and apply ALL filtering and sorting in memory
+    let budgets = snapshot.docs.map(doc => convertBudgetToDTO(doc.data())).filter(Boolean) as BudgetDTO[];
+    
+    // Apply all filters in memory
+    if (options?.isOverall !== undefined) {
+      budgets = budgets.filter(budget => budget.isOverall === options.isOverall);
+    }
+    
+    if (options?.period) {
+      budgets = budgets.filter(budget => budget.period === options.period);
+    }
+    
+    if (options?.activeOnly) {
+      const now = new Date();
+      budgets = budgets.filter(budget => {
+        const startDate = new Date(budget.startDate);
+        const endDate = new Date(budget.endDate);
+        return endDate >= now && startDate <= now;
+      });
+    } else if (options?.year && options?.month) {
+      // Filter by specific month and year
+      budgets = budgets.filter(budget => {
+        const startDate = new Date(budget.startDate);
+        return startDate.getFullYear() === options.year && startDate.getMonth() === (options.month! - 1);
+      });
+    } else if (options?.year) {
+      // Filter by specific year
+      budgets = budgets.filter(budget => {
+        const startDate = new Date(budget.startDate);
+        return startDate.getFullYear() === options.year;
+      });
+    }
+
+    // Sort in memory: overall budgets first, then by startDate (newest first), then by name
+    return budgets.sort((a, b) => {
+      // First sort by isOverall (overall budgets first)
+      if (a.isOverall && !b.isOverall) return -1;
+      if (!a.isOverall && b.isOverall) return 1;
+      
+      // Then sort by startDate (newest first)
+      const aDate = new Date(a.startDate).getTime();
+      const bDate = new Date(b.startDate).getTime();
+      if (aDate !== bDate) return bDate - aDate;
+      
+      // Finally sort by name alphabetically
+      return a.name.localeCompare(b.name);
+    });
   } catch (error) {
     console.error(`Error fetching budgets for user ${userId}:`, error);
     throw new Error("Failed to fetch budgets.");
@@ -268,7 +293,6 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
         hasChanges = true;
     }
 
-
     if (!hasChanges && Object.keys(dataToUpdate).length === 1) { // Only updatedAt
       console.log("No actual changes to update for budget:", budgetId);
       return convertBudgetToDTO(existingBudget);
@@ -311,6 +335,7 @@ export async function deleteBudget(budgetId: string, userId: string): Promise<bo
 
 /**
  * Gets or creates/updates the overall budget for a user for a specific period.
+ * Simplified to avoid index requirements.
  */
 export async function setOverallBudget(
   userId: string,
@@ -340,24 +365,27 @@ export async function setOverallBudget(
     throw new Error("Invalid period for overall budget. Must be 'monthly' or 'yearly'.");
   }
 
-  const existingOverallQuery = budgetsCollection
+  // Simplified query to avoid index requirements
+  const query = budgetsCollection
     .where('userId', '==', userId)
-    .where('isOverall', '==', true)
-    .where('period', '==', payload.period)
-    .where('startDate', '==', Timestamp.fromDate(startDate));
+    .where('isOverall', '==', true);
 
-  const existingSnapshot = await existingOverallQuery.get();
+  const snapshot = await query.get();
+  
+  // Filter in memory for the specific period and start date
+  const existingBudget = snapshot.docs
+    .map(doc => doc.data())
+    .find(budget => 
+      budget.period === payload.period && 
+      budget.startDate instanceof Timestamp &&
+      budget.startDate.toDate().getTime() === startDate.getTime()
+    );
 
-  if (!existingSnapshot.empty) {
-    const existingBudgetId = existingSnapshot.docs[0].id;
-    return updateBudget(existingBudgetId, userId, {
+  if (existingBudget) {
+    return updateBudget(existingBudget.id, userId, {
       name: budgetName,
       amount: payload.amount,
       notes: payload.notes,
-      // Retain existing period, startDate, endDate, isOverall, isRecurring for this specific update type
-      // If these also need to change, the payload to setOverallBudget should be more comprehensive
-      // or a different update mechanism should be used.
-      // For now, setOverallBudget primarily updates amount and notes for an existing period's overall budget.
     });
   } else {
     return createBudget(userId, {
@@ -374,6 +402,10 @@ export async function setOverallBudget(
   }
 }
 
+/**
+ * Gets overall budget for a specific period.
+ * Simplified to avoid index requirements.
+ */
 export async function getOverallBudgetForPeriod(
   userId: string,
   period: 'monthly' | 'yearly',
@@ -394,20 +426,24 @@ export async function getOverallBudgetForPeriod(
     throw new Error("Invalid period. Must be 'monthly' or 'yearly'.");
   }
 
+  // Simplified query to avoid index requirements
   const query = budgetsCollection
     .where('userId', '==', userId)
-    .where('isOverall', '==', true)
-    .where('period', '==', period)
-    .where('startDate', '==', Timestamp.fromDate(startDate))
-    .limit(1);
+    .where('isOverall', '==', true);
 
   const snapshot = await query.get();
-  if (snapshot.empty) {
-    return null;
-  }
-  return convertBudgetToDTO(snapshot.docs[0].data());
-}
+  
+  // Filter in memory for the specific period and start date
+  const matchingBudget = snapshot.docs
+    .map(doc => doc.data())
+    .find(budget => 
+      budget.period === period && 
+      budget.startDate instanceof Timestamp &&
+      budget.startDate.toDate().getTime() === startDate.getTime()
+    );
 
+  return matchingBudget ? convertBudgetToDTO(matchingBudget) : null;
+}
 
 /**
  * Updates the spentAmount for a given budget.
