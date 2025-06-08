@@ -1,7 +1,7 @@
 // apps/web/src/app/(app)/budgets/BudgetsClientPage.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   DollarSign,
   Trash2,
@@ -17,7 +17,8 @@ import {
   BarChartBig,
   ListChecks,
   Eye,
-  EyeOff
+  EyeOff,
+  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -35,11 +36,9 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import type { WebAppBudget, WebAppCategory, WebAppSetOverallBudgetPayload, WebAppCreateBudgetPayload, WebAppUpdateBudgetPayload } from '@/types/budget';
-// BudgetForm might be used if we add a "detailed edit" button later.
-// import BudgetForm from './BudgetForm';
 import { IconRenderer, getContrastingTextColor, AvailableIconName } from '../categories/categoryUtils';
 import { cn } from '@/lib/utils';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -64,20 +63,19 @@ interface BudgetsClientPageProps {
   currentMonth: number; // 1-12
 }
 
-// Schema for the simplified overall budget input (amount only)
 const overallBudgetFormSchema = z.object({
-  amount: z.coerce // Use z.coerce for automatic string to number conversion
+  amount: z.coerce
     .number({
         required_error: "Budget amount is required.",
         invalid_type_error: "Budget amount must be a valid number."
     })
-    .min(0.01, "Amount must be greater than 0.")
+    .min(0.01, "Amount must be greater than 0."),
+  isRecurring: z.boolean(),
 });
 type OverallBudgetFormData = z.infer<typeof overallBudgetFormSchema>;
 
-// Schema for individual category budget input
 const categoryBudgetAmountSchema = z.object({
-  amount: z.coerce // Use z.coerce for automatic string to number conversion
+  amount: z.coerce
     .number({
         required_error: "Amount is required.",
         invalid_type_error: "Amount must be a valid number."
@@ -85,8 +83,6 @@ const categoryBudgetAmountSchema = z.object({
     .min(0.01, "Amount must be positive.")
 });
 
-
-// Helper to format currency
 const formatCurrency = (amount: number | null | undefined, withPlusSign = false): string => {
   if (amount === null || amount === undefined) return '$0.00';
   const value = Number(amount);
@@ -95,7 +91,6 @@ const formatCurrency = (amount: number | null | undefined, withPlusSign = false)
   return withPlusSign && value > 0 ? `+${formatted}` : formatted;
 };
 
-// Individual Category Budget Row Component
 interface CategoryBudgetRowProps {
   category: WebAppCategory;
   budget: WebAppBudget | undefined;
@@ -144,7 +139,7 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: Cat
           <div className="relative flex-grow">
             <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
-              type="text" // Using text for better control with parseFloat and empty string handling
+              type="text"
               inputMode="decimal"
               step="0.01"
               value={amountInput}
@@ -183,46 +178,130 @@ export default function BudgetsClientPage({
   initialOverallBudget,
   initialCategoryBudgets,
   budgetableCategories,
-  currentYear,
-  currentMonth,
+  currentYear: initialYear,
+  currentMonth: initialMonth,
 }: BudgetsClientPageProps) {
+  const [period, setPeriod] = useState({ year: initialYear, month: initialMonth });
   const [overallBudget, setOverallBudget] = useState<WebAppBudget | null>(initialOverallBudget);
   const [categoryBudgets, setCategoryBudgets] = useState<WebAppBudget[]>(initialCategoryBudgets);
   const [showCategoryBudgetsSection, setShowCategoryBudgetsSection] = useState(false);
   const [isSubmittingOverall, setIsSubmittingOverall] = useState(false);
   const [budgetToDelete, setBudgetToDelete] = useState<WebAppBudget | null>(null);
   const [isSavingCategoryBudget, setIsSavingCategoryBudget] = useState<string | null>(null);
-  // const [_isLoadingPageData, setIsLoadingPageData] = useState(false);
+  const [isLoadingPageData, setIsLoadingPageData] = useState(false);
 
   const {
     control: overallControl,
     handleSubmit: handleOverallSubmit,
     reset: resetOverallForm,
     formState: { errors: overallErrors, isDirty: isOverallDirty },
-    setValue: setOverallFormValue,
   } = useForm<OverallBudgetFormData>({
     resolver: zodResolver(overallBudgetFormSchema),
     defaultValues: {
-      amount: initialOverallBudget?.amount || undefined,
+      amount: initialOverallBudget?.amount ?? undefined,
+      isRecurring: initialOverallBudget?.isRecurring ?? false,
     },
   });
+
+  const fetchBudgetDataForPeriod = useCallback(async (year: number, month: number) => {
+    setIsLoadingPageData(true);
+    const toastId = toast.loading(`Loading data for ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}...`);
+
+    try {
+        const [overallRes, categoryRes] = await Promise.all([
+            fetch(`/api/budgets/overall?period=monthly&year=${year}&month=${month}`),
+            fetch(`/api/budgets?isOverall=false&period=monthly&year=${year}&month=${month}`)
+        ]);
+
+        const overallResult = await overallRes.json();
+        const categoryResult = await categoryRes.json();
+
+        toast.dismiss(toastId);
+        
+        if (!overallRes.ok && overallRes.status !== 404) throw new Error(overallResult.error || 'Failed to fetch overall budget');
+        if (!categoryRes.ok) throw new Error(categoryResult.error || 'Failed to fetch category budgets');
+        
+        const newOverallBudget = (overallResult.data as WebAppBudget | null) || null;
+        setOverallBudget(newOverallBudget);
+        resetOverallForm({
+            amount: newOverallBudget?.amount || undefined,
+            isRecurring: newOverallBudget?.isRecurring || false
+        });
+
+        setCategoryBudgets((categoryResult.data as WebAppBudget[] || []).sort((a, b) => a.name.localeCompare(b.name)));
+        
+    } catch (error) {
+        toast.error((error as Error).message, { id: toastId });
+    } finally {
+        setIsLoadingPageData(false);
+    }
+  }, [resetOverallForm]);
+
+  useEffect(() => {
+      if (period.year !== initialYear || period.month !== initialMonth) {
+          fetchBudgetDataForPeriod(period.year, period.month);
+      }
+  }, [period, initialYear, initialMonth, fetchBudgetDataForPeriod]);
 
   useEffect(() => {
     setOverallBudget(initialOverallBudget);
     resetOverallForm({
-      amount: initialOverallBudget?.amount || undefined,
+      amount: initialOverallBudget?.amount,
+      isRecurring: initialOverallBudget?.isRecurring ?? false,
     });
   }, [initialOverallBudget, resetOverallForm]);
 
-  useEffect(() => {
-    setCategoryBudgets(initialCategoryBudgets.sort((a, b) => a.name.localeCompare(b.name)));
-  }, [initialCategoryBudgets]);
+  const changeMonth = (direction: 'next' | 'prev') => {
+    setPeriod(current => {
+        let newMonth = direction === 'next' ? current.month + 1 : current.month - 1;
+        let newYear = current.year;
+        if (newMonth > 12) {
+            newMonth = 1;
+            newYear++;
+        }
+        if (newMonth < 1) {
+            newMonth = 12;
+            newYear--;
+        }
+        return { year: newYear, month: newMonth };
+    });
+  };
 
   const selectedPeriodDisplay = useMemo(() => {
-    const date = new Date(currentYear, currentMonth - 1, 1);
+    const date = new Date(period.year, period.month - 1, 1);
     return date.toLocaleString('default', { month: 'long', year: 'numeric' });
-  }, [currentYear, currentMonth]);
+  }, [period]);
 
+  const onOverallBudgetSubmit: SubmitHandler<OverallBudgetFormData> = async (data) => {
+    setIsSubmittingOverall(true);
+    const toastId = toast.loading("Saving overall budget...");
+    const payload: WebAppSetOverallBudgetPayload = {
+      amount: data.amount,
+      period: 'monthly',
+      year: period.year,
+      month: period.month,
+      notes: overallBudget?.notes || null,
+      isRecurring: data.isRecurring,
+    };
+    try {
+      const response = await fetch('/api/budgets/overall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      toast.dismiss(toastId);
+      if (!response.ok) throw new Error(result.error || "Failed to save overall budget");
+      const updatedBudget = result.data as WebAppBudget;
+      setOverallBudget(updatedBudget);
+      resetOverallForm({
+          amount: updatedBudget.amount,
+          isRecurring: updatedBudget.isRecurring,
+      });
+      toast.success("Overall budget saved!");
+    } catch (error) {
+      toast.error((error as Error).message, { id: toastId });
+    } finally {
+      setIsSubmittingOverall(false);
+    }
+  };
+  
   const overallBudgetChartData = useMemo(() => {
     if (!overallBudget || !overallBudget.amount || overallBudget.amount <= 0) {
       return [{ name: 'Not Set', value: 100, fill: 'hsl(var(--muted))', amount: 0 }];
@@ -251,33 +330,6 @@ export default function BudgetsClientPage({
       };
     });
   }, [categoryBudgets, budgetableCategories, showCategoryBudgetsSection]);
-
-
-  const onOverallBudgetSubmit = async (data: OverallBudgetFormData) => {
-    setIsSubmittingOverall(true);
-    const toastId = toast.loading("Saving overall budget...");
-    const payload: WebAppSetOverallBudgetPayload = {
-      amount: data.amount,
-      period: 'monthly',
-      year: currentYear,
-      month: currentMonth,
-      notes: overallBudget?.notes || null,
-    };
-    try {
-      const response = await fetch('/api/budgets/overall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      toast.dismiss(toastId);
-      if (!response.ok) throw new Error(result.error || "Failed to save overall budget");
-      const updatedBudget = result.data as WebAppBudget;
-      setOverallBudget(updatedBudget);
-      setOverallFormValue('amount', updatedBudget.amount);
-      toast.success("Overall budget saved!");
-    } catch (error) {
-      toast.error((error as Error).message, { id: toastId });
-    } finally {
-      setIsSubmittingOverall(false);
-    }
-  };
   
   const handleSaveCategoryBudget = async (categoryId: string, amount: number) => {
     setIsSavingCategoryBudget(categoryId);
@@ -296,8 +348,8 @@ export default function BudgetsClientPage({
       categoryId: categoryId,
       amount: amount,
       period: 'monthly',
-      startDate: new Date(currentYear, currentMonth - 1, 1).toISOString(),
-      endDate: new Date(currentYear, currentMonth, 0, 23, 59, 59, 999).toISOString(),
+      startDate: new Date(period.year, period.month - 1, 1).toISOString(),
+      endDate: new Date(period.year, period.month, 0, 23, 59, 59, 999).toISOString(),
       isRecurring: existingBudget?.isRecurring || false,
       isOverall: false,
       notes: existingBudget?.notes || null,
@@ -380,9 +432,9 @@ export default function BudgetsClientPage({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" disabled><ChevronUp className="-rotate-90 h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => changeMonth('prev')} disabled={isLoadingPageData}><ChevronUp className="-rotate-90 h-4 w-4" /></Button>
             <span className="text-sm font-medium text-foreground min-w-[130px] text-center">{selectedPeriodDisplay}</span>
-            <Button variant="outline" size="icon" disabled><ChevronDown className="-rotate-90 h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => changeMonth('next')} disabled={isLoadingPageData}><ChevronDown className="-rotate-90 h-4 w-4" /></Button>
           </div>
         </div>
 
@@ -394,6 +446,12 @@ export default function BudgetsClientPage({
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <DollarSign className="h-6 w-6 text-primary" /> Overall Monthly Budget
                 </CardTitle>
+                 {overallBudget?.source === 'recurring' && (
+                    <CardDescription className="flex items-center gap-1.5 text-xs text-blue-600 mt-1">
+                        <History className="h-3 w-3" />
+                        Using recurring budget template. Any changes will create an explicit budget for this month.
+                    </CardDescription>
+                )}
               </CardHeader>
               <CardContent className="p-0">
                 <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-3">
@@ -405,26 +463,35 @@ export default function BudgetsClientPage({
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                         <Input
                           id="overallAmount"
-                          type="text" // Changed to text for better control with z.coerce
+                          type="text"
                           inputMode="decimal"
                           step="0.01"
                           {...field}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            field.onChange(val); // Pass string directly, Zod will coerce
-                          }}
-                          value={field.value === undefined ? '' : String(field.value)} // RHF expects string for text input
+                          onChange={(e) => field.onChange(e.target.value)}
+                          value={field.value === undefined ? '' : String(field.value)}
                           placeholder="Enter total budget amount"
                           className={cn("pl-10 h-12 text-xl font-semibold focus:ring-primary focus:border-primary", overallErrors.amount && "border-destructive")}
-                          disabled={isSubmittingOverall}
+                          disabled={isSubmittingOverall || isLoadingPageData}
                         />
                       </div>
                     )}
                   />
                   {overallErrors.amount && <p className="text-sm text-destructive mt-1">{overallErrors.amount.message}</p>}
-                  <Button type="submit" size="lg" className="w-full h-11" disabled={isSubmittingOverall || !isOverallDirty}>
+                  
+                   <Controller
+                    name="isRecurring"
+                    control={overallControl}
+                    render={({ field }) => (
+                      <div className="flex items-center space-x-2 pt-2">
+                        <Switch id="isRecurring" checked={field.value} onCheckedChange={field.onChange} disabled={isSubmittingOverall || isLoadingPageData} />
+                        <Label htmlFor="isRecurring" className="text-sm font-medium">Set as recurring monthly budget</Label>
+                      </div>
+                    )}
+                  />
+                  
+                  <Button type="submit" size="lg" className="w-full h-11" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
                     {isSubmittingOverall ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                    {initialOverallBudget?.amount ? 'Update Overall' : 'Set Overall'}
+                    {overallBudget?.source === 'explicit' ? 'Update Budget' : 'Set Budget'}
                   </Button>
                 </form>
               </CardContent>

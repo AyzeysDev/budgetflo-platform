@@ -31,6 +31,7 @@ export interface WebAppBudget {
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   category?: WebAppCategory; // Optional: populated on the client for display
+  source?: 'explicit' | 'recurring'; // NEW: To know if the budget is from a template
 }
 
 // Payload for creating a new budget (overall or category-specific) via BFF
@@ -66,6 +67,7 @@ export interface WebAppSetOverallBudgetPayload {
     year: number;
     month?: number; // 1-12, required if period is 'monthly'
     notes?: string | null;
+    isRecurring: boolean; // NEW: Added to payload
 }
 
 // Represents a budget item for display, especially for category budgets

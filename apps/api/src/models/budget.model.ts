@@ -38,6 +38,19 @@ export interface Budget {
   updatedAt: Timestamp | Date | string;
 }
 
+/**
+ * NEW: Represents the single recurring overall monthly budget template for a user.
+ * Stored in a separate `recurringBudgets` collection with the document ID being the userId.
+ */
+export interface RecurringBudget {
+  userId: string; // Document ID in this collection
+  amount: number;
+  period: 'monthly'; // For now, only monthly recurring is implemented
+  active: boolean; // User can enable/disable this recurring template
+  updatedAt: Timestamp | Date | string;
+}
+
+
 // --- Payloads for API requests ---
 
 export interface CreateCategoryPayload {
@@ -111,4 +124,5 @@ export interface BudgetDTO extends Omit<Budget, 'createdAt' | 'updatedAt' | 'sta
   endDate: string;
   isOverall: boolean; // Ensure this is always present in DTO, defaulting to false
   categoryId: string | null; // Ensure categoryId can be null in DTO
+  source?: 'explicit' | 'recurring'; // NEW: Indicates the origin of the budget data
 }

@@ -5,7 +5,8 @@ import {
   CreateBudgetPayload,
   UpdateBudgetPayload,
   BudgetDTO,
-  CategoryDTO // Added for category validation
+  CategoryDTO, // Added for category validation
+  RecurringBudget
 } from '../models/budget.model';
 import { Timestamp, FieldValue, CollectionReference, WriteBatch } from 'firebase-admin/firestore';
 import { getCategoryById } from './categoryService'; // To validate category existence
@@ -14,7 +15,6 @@ if (!firebaseInitialized || !firestore) {
   console.error("BudgetService: Firebase is not initialized. Budget operations will fail.");
 }
 
-// It's safer to get the collection reference only when Firestore is confirmed to be available.
 const getBudgetsCollection = (): CollectionReference<Budget> => {
   if (!firestore) {
     throw new Error("Firestore is not initialized. Cannot access budgets collection.");
@@ -22,36 +22,36 @@ const getBudgetsCollection = (): CollectionReference<Budget> => {
   return firestore.collection('budgets') as CollectionReference<Budget>;
 };
 
-/**
- * Converts Firestore Timestamps in a budget object to ISO date strings.
- * Ensures default for isOverall.
- */
-function convertBudgetToDTO(budgetData: Budget | undefined): BudgetDTO | null {
+const getRecurringBudgetsCollection = (): CollectionReference<RecurringBudget> => {
+    if (!firestore) {
+        throw new Error("Firestore is not initialized. Cannot access recurringBudgets collection.");
+    }
+    return firestore.collection('recurringBudgets') as CollectionReference<RecurringBudget>;
+}
+
+function convertBudgetToDTO(budgetData: Budget | undefined, source?: 'explicit' | 'recurring'): BudgetDTO | null {
   if (!budgetData) return null;
 
   const dto: BudgetDTO = {
     id: budgetData.id,
     userId: budgetData.userId,
     name: budgetData.name,
-    categoryId: budgetData.categoryId || null, // Ensure null if undefined
+    categoryId: budgetData.categoryId || null,
     amount: budgetData.amount,
-    spentAmount: budgetData.spentAmount || 0, // Default to 0 if undefined
+    spentAmount: budgetData.spentAmount || 0,
     period: budgetData.period,
     startDate: budgetData.startDate instanceof Timestamp ? budgetData.startDate.toDate().toISOString() : String(budgetData.startDate),
     endDate: budgetData.endDate instanceof Timestamp ? budgetData.endDate.toDate().toISOString() : String(budgetData.endDate),
     isRecurring: budgetData.isRecurring,
-    isOverall: budgetData.isOverall || false, // Default to false if undefined
+    isOverall: budgetData.isOverall || false,
     notes: budgetData.notes || null,
     createdAt: budgetData.createdAt instanceof Timestamp ? budgetData.createdAt.toDate().toISOString() : String(budgetData.createdAt),
     updatedAt: budgetData.updatedAt instanceof Timestamp ? budgetData.updatedAt.toDate().toISOString() : String(budgetData.updatedAt),
+    source: source || 'explicit',
   };
   return dto;
 }
 
-/**
- * Creates a new budget for a user.
- * If `isOverall` is true, it ensures only one overall budget exists per user for the specified period.
- */
 export async function createBudget(userId: string, payload: CreateBudgetPayload): Promise<BudgetDTO | null> {
   const budgetsCollection = getBudgetsCollection();
   const now = FieldValue.serverTimestamp() as Timestamp;
@@ -62,7 +62,6 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
 
   let categoryIdForDb: string | null = null;
 
-  // Validate categoryId if it's not an overall budget
   if (!payload.isOverall) {
     if (typeof payload.categoryId === 'string' && payload.categoryId.trim() !== '') {
       const category: CategoryDTO | null = await getCategoryById(payload.categoryId, userId);
@@ -74,18 +73,16 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
       }
       categoryIdForDb = payload.categoryId;
     } else {
-      // categoryId is required and must be a non-empty string for category-specific budgets.
       throw new Error("A valid categoryId is required for category-specific budgets.");
     }
   }
-  // For overall budgets, categoryIdForDb remains null
 
   const newBudgetRef = budgetsCollection.doc();
   const budgetData: Budget = {
     id: newBudgetRef.id,
     userId: userId,
     name: payload.name,
-    categoryId: categoryIdForDb, // Use the validated or null categoryId
+    categoryId: categoryIdForDb,
     amount: payload.amount,
     spentAmount: 0,
     period: payload.period,
@@ -122,17 +119,12 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
   }
 }
 
-/**
- * Retrieves all budgets for a specific user.
- * Ultra-simplified to completely avoid Firestore index requirements.
- */
 export async function getBudgetsByUserId(
   userId: string,
   options?: { isOverall?: boolean; activeOnly?: boolean; period?: Budget['period'], year?: number, month?: number }
 ): Promise<BudgetDTO[]> {
   const budgetsCollection = getBudgetsCollection();
   try {
-    // Use only the most basic query - just userId to avoid any index requirements
     const query = budgetsCollection.where('userId', '==', userId);
     const snapshot = await query.get();
 
@@ -140,10 +132,8 @@ export async function getBudgetsByUserId(
       return [];
     }
     
-    // Get all budgets and apply ALL filtering and sorting in memory
     let budgets = snapshot.docs.map(doc => convertBudgetToDTO(doc.data())).filter(Boolean) as BudgetDTO[];
     
-    // Apply all filters in memory
     if (options?.isOverall !== undefined) {
       budgets = budgets.filter(budget => budget.isOverall === options.isOverall);
     }
@@ -160,31 +150,25 @@ export async function getBudgetsByUserId(
         return endDate >= now && startDate <= now;
       });
     } else if (options?.year && options?.month) {
-      // Filter by specific month and year
       budgets = budgets.filter(budget => {
         const startDate = new Date(budget.startDate);
         return startDate.getFullYear() === options.year && startDate.getMonth() === (options.month! - 1);
       });
     } else if (options?.year) {
-      // Filter by specific year
       budgets = budgets.filter(budget => {
         const startDate = new Date(budget.startDate);
         return startDate.getFullYear() === options.year;
       });
     }
 
-    // Sort in memory: overall budgets first, then by startDate (newest first), then by name
     return budgets.sort((a, b) => {
-      // First sort by isOverall (overall budgets first)
       if (a.isOverall && !b.isOverall) return -1;
       if (!a.isOverall && b.isOverall) return 1;
       
-      // Then sort by startDate (newest first)
       const aDate = new Date(a.startDate).getTime();
       const bDate = new Date(b.startDate).getTime();
       if (aDate !== bDate) return bDate - aDate;
       
-      // Finally sort by name alphabetically
       return a.name.localeCompare(b.name);
     });
   } catch (error) {
@@ -193,9 +177,6 @@ export async function getBudgetsByUserId(
   }
 }
 
-/**
- * Retrieves a specific budget by its ID and userId.
- */
 export async function getBudgetById(budgetId: string, userId: string): Promise<BudgetDTO | null> {
   const budgetsCollection = getBudgetsCollection();
   try {
@@ -217,9 +198,6 @@ export async function getBudgetById(budgetId: string, userId: string): Promise<B
   }
 }
 
-/**
- * Updates an existing budget for a user.
- */
 export async function updateBudget(budgetId: string, userId: string, payload: UpdateBudgetPayload): Promise<BudgetDTO | null> {
   const budgetsCollection = getBudgetsCollection();
   const budgetRef = budgetsCollection.doc(budgetId);
@@ -265,16 +243,16 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
         hasChanges = true;
     }
 
-    if (payload.categoryId !== undefined) { // If categoryId is part of the payload
-        if (finalIsOverall) { // If budget is (or is being changed to) overall
-            if (payload.categoryId !== null) { // Overall budgets must have null categoryId
+    if (payload.categoryId !== undefined) {
+        if (finalIsOverall) {
+            if (payload.categoryId !== null) {
                  throw new Error('categoryId must be null for an overall budget.');
             }
-            if (existingBudget.categoryId !== null) { // If it previously had a categoryId
+            if (existingBudget.categoryId !== null) {
                 dataToUpdate.categoryId = null;
                 hasChanges = true;
             }
-        } else { // If budget is (or is being changed to) category-specific
+        } else {
             if (typeof payload.categoryId === 'string' && payload.categoryId.trim() !== '') {
                 if (payload.categoryId !== existingBudget.categoryId) {
                     const category = await getCategoryById(payload.categoryId, userId);
@@ -283,17 +261,16 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
                     dataToUpdate.categoryId = payload.categoryId;
                     hasChanges = true;
                 }
-            } else { // CategoryId is required for non-overall, and it's missing or empty in payload
+            } else {
                 throw new Error("A valid categoryId is required for category-specific budgets during update if changing categoryId.");
             }
         }
     } else if (dataToUpdate.isOverall === true && existingBudget.categoryId !== null) {
-        // If changing to overall and categoryId was not in payload, ensure it's set to null
         dataToUpdate.categoryId = null;
         hasChanges = true;
     }
 
-    if (!hasChanges && Object.keys(dataToUpdate).length === 1) { // Only updatedAt
+    if (!hasChanges && Object.keys(dataToUpdate).length === 1) {
       console.log("No actual changes to update for budget:", budgetId);
       return convertBudgetToDTO(existingBudget);
     }
@@ -308,9 +285,6 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
   }
 }
 
-/**
- * Deletes a budget for a user.
- */
 export async function deleteBudget(budgetId: string, userId: string): Promise<boolean> {
   const budgetsCollection = getBudgetsCollection();
   const budgetRef = budgetsCollection.doc(budgetId);
@@ -333,121 +307,159 @@ export async function deleteBudget(budgetId: string, userId: string): Promise<bo
   }
 }
 
-/**
- * Gets or creates/updates the overall budget for a user for a specific period.
- * Simplified to avoid index requirements.
- */
 export async function setOverallBudget(
   userId: string,
-  payload: { amount: number; period: 'monthly' | 'yearly'; year: number; month?: number; notes?: string | null }
+  payload: { amount: number; period: 'monthly' | 'yearly'; year: number; month?: number; notes?: string | null; isRecurring: boolean; }
 ): Promise<BudgetDTO | null> {
-  const budgetsCollection = getBudgetsCollection();
-  if (payload.amount <= 0) {
-    throw new Error("Overall budget amount must be positive.");
-  }
+    const budgetsCollection = getBudgetsCollection();
+    const recurringBudgetsCollection = getRecurringBudgetsCollection();
+    const recurringBudgetRef = recurringBudgetsCollection.doc(userId);
 
-  let startDate: Date;
-  let endDate: Date;
-  let budgetName: string;
-
-  if (payload.period === 'monthly') {
-    if (payload.month === undefined || payload.month < 1 || payload.month > 12) {
-      throw new Error("Month is required for monthly overall budget and must be between 1 and 12.");
+    if (payload.amount <= 0) {
+        throw new Error("Overall budget amount must be positive.");
     }
-    startDate = new Date(payload.year, payload.month - 1, 1);
-    endDate = new Date(payload.year, payload.month, 0, 23, 59, 59, 999);
-    budgetName = `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${payload.year}`;
-  } else if (payload.period === 'yearly') {
-    startDate = new Date(payload.year, 0, 1);
-    endDate = new Date(payload.year, 11, 31, 23, 59, 59, 999);
-    budgetName = `Overall Budget - ${payload.year}`;
-  } else {
-    throw new Error("Invalid period for overall budget. Must be 'monthly' or 'yearly'.");
-  }
 
-  // Simplified query to avoid index requirements
-  const query = budgetsCollection
-    .where('userId', '==', userId)
-    .where('isOverall', '==', true);
+    let startDate: Date;
+    let endDate: Date;
+    let budgetName: string;
 
-  const snapshot = await query.get();
-  
-  // Filter in memory for the specific period and start date
-  const existingBudget = snapshot.docs
-    .map(doc => doc.data())
-    .find(budget => 
-      budget.period === payload.period && 
-      budget.startDate instanceof Timestamp &&
-      budget.startDate.toDate().getTime() === startDate.getTime()
-    );
+    if (payload.period === 'monthly') {
+        if (payload.month === undefined || payload.month < 1 || payload.month > 12) {
+            throw new Error("Month is required for monthly overall budget.");
+        }
+        startDate = new Date(payload.year, payload.month - 1, 1);
+        endDate = new Date(payload.year, payload.month, 0, 23, 59, 59, 999);
+        budgetName = `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${payload.year}`;
+    } else {
+        throw new Error("Only monthly recurring budgets are supported at this time.");
+    }
 
-  if (existingBudget) {
-    return updateBudget(existingBudget.id, userId, {
-      name: budgetName,
-      amount: payload.amount,
-      notes: payload.notes,
-    });
-  } else {
-    return createBudget(userId, {
-      name: budgetName,
-      amount: payload.amount,
-      period: payload.period,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      isRecurring: false,
-      isOverall: true,
-      categoryId: null,
-      notes: payload.notes,
-    });
-  }
+    try {
+        if (!firestore) {
+            throw new Error("Firestore is not initialized. Cannot perform batch operations.");
+        }
+        const batch = firestore.batch();
+        const recurringDoc = await recurringBudgetRef.get();
+
+        if (payload.isRecurring) {
+            const recurringData: RecurringBudget = {
+                userId,
+                amount: payload.amount,
+                period: 'monthly',
+                active: true,
+                updatedAt: FieldValue.serverTimestamp() as Timestamp
+            };
+            batch.set(recurringBudgetRef, recurringData, { merge: true });
+        } else {
+            if (recurringDoc.exists) {
+                batch.update(recurringBudgetRef, { active: false, updatedAt: FieldValue.serverTimestamp() });
+            }
+        }
+
+        const explicitBudgetQuery = budgetsCollection
+            .where('userId', '==', userId)
+            .where('isOverall', '==', true)
+            .where('startDate', '==', Timestamp.fromDate(startDate));
+        
+        const explicitBudgetSnapshot = await explicitBudgetQuery.get();
+        const existingExplicitBudgetDoc = explicitBudgetSnapshot.docs[0];
+
+        if (existingExplicitBudgetDoc) {
+            batch.update(existingExplicitBudgetDoc.ref, { 
+                amount: payload.amount, 
+                notes: payload.notes || null,
+                isRecurring: payload.isRecurring,
+                updatedAt: FieldValue.serverTimestamp()
+            });
+        } else {
+            const newBudgetRef = budgetsCollection.doc();
+            const newBudgetData: Budget = {
+                id: newBudgetRef.id,
+                userId,
+                name: budgetName,
+                categoryId: null,
+                amount: payload.amount,
+                spentAmount: 0,
+                period: 'monthly',
+                startDate: Timestamp.fromDate(startDate),
+                endDate: Timestamp.fromDate(endDate),
+                isRecurring: payload.isRecurring,
+                isOverall: true,
+                notes: payload.notes || null,
+                createdAt: FieldValue.serverTimestamp() as Timestamp,
+                updatedAt: FieldValue.serverTimestamp() as Timestamp,
+            };
+            batch.set(newBudgetRef, newBudgetData);
+        }
+
+        await batch.commit();
+
+        return getOverallBudgetForPeriod(userId, 'monthly', payload.year, payload.month);
+    } catch (error) {
+        console.error("Error in setOverallBudget operation:", error);
+        throw new Error("Failed to set overall budget.");
+    }
 }
 
-/**
- * Gets overall budget for a specific period.
- * Simplified to avoid index requirements.
- */
 export async function getOverallBudgetForPeriod(
   userId: string,
   period: 'monthly' | 'yearly',
   year: number,
-  month?: number // 1-12 for monthly
+  month?: number
 ): Promise<BudgetDTO | null> {
-  const budgetsCollection = getBudgetsCollection();
+    const budgetsCollection = getBudgetsCollection();
 
-  let startDate: Date;
-  if (period === 'monthly') {
-    if (month === undefined || month < 1 || month > 12) {
-      throw new Error("Month is required for monthly overall budget and must be between 1 and 12.");
+    if (period !== 'monthly') {
+        throw new Error("Only monthly budgets are currently supported for this operation.");
     }
-    startDate = new Date(year, month - 1, 1);
-  } else if (period === 'yearly') {
-    startDate = new Date(year, 0, 1);
-  } else {
-    throw new Error("Invalid period. Must be 'monthly' or 'yearly'.");
-  }
+    if (month === undefined || month < 1 || month > 12) {
+        throw new Error("Month is required for getOverallBudgetForPeriod.");
+    }
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-  // Simplified query to avoid index requirements
-  const query = budgetsCollection
-    .where('userId', '==', userId)
-    .where('isOverall', '==', true);
+    const query = budgetsCollection
+        .where('userId', '==', userId)
+        .where('isOverall', '==', true)
+        .where('startDate', '==', Timestamp.fromDate(startDate));
 
-  const snapshot = await query.get();
-  
-  // Filter in memory for the specific period and start date
-  const matchingBudget = snapshot.docs
-    .map(doc => doc.data())
-    .find(budget => 
-      budget.period === period && 
-      budget.startDate instanceof Timestamp &&
-      budget.startDate.toDate().getTime() === startDate.getTime()
-    );
+    const snapshot = await query.get();
+    if (!snapshot.empty) {
+        const explicitBudget = snapshot.docs[0].data();
+        return convertBudgetToDTO(explicitBudget, 'explicit');
+    }
 
-  return matchingBudget ? convertBudgetToDTO(matchingBudget) : null;
+    const recurringBudgetsCollection = getRecurringBudgetsCollection();
+    const recurringBudgetRef = recurringBudgetsCollection.doc(userId);
+    const recurringDoc = await recurringBudgetRef.get();
+
+    if (recurringDoc.exists) {
+        const recurringData = recurringDoc.data() as RecurringBudget;
+        if (recurringData.active) {
+            const budgetFromRecurring: Budget = {
+                id: `recurring-${userId}-${year}-${month}`,
+                userId: userId,
+                name: `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${year}`,
+                categoryId: null,
+                amount: recurringData.amount,
+                spentAmount: 0,
+                period: 'monthly',
+                startDate: Timestamp.fromDate(startDate),
+                endDate: Timestamp.fromDate(endDate),
+                isRecurring: true,
+                isOverall: true,
+                notes: "This budget is based on your recurring template.",
+                createdAt: recurringData.updatedAt,
+                updatedAt: recurringData.updatedAt,
+            };
+            return convertBudgetToDTO(budgetFromRecurring, 'recurring');
+        }
+    }
+
+    return null;
 }
 
-/**
- * Updates the spentAmount for a given budget.
- */
+
 export async function updateBudgetSpentAmount(
   budgetId: string,
   userId: string,

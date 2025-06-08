@@ -105,8 +105,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Basic validation, more detailed validation is on the backend
-  if (!payload.amount || payload.amount <= 0 || !payload.period || !payload.year) {
-    return NextResponse.json({ error: "Missing required fields: amount, period, year." }, { status: 400 });
+  if (typeof payload.amount !== 'number' || payload.amount <= 0 || !payload.period || !payload.year || typeof payload.isRecurring !== 'boolean') {
+    return NextResponse.json({ error: "Missing or invalid required fields: amount, period, year, isRecurring." }, { status: 400 });
   }
   if (payload.period === 'monthly' && (payload.month === undefined || payload.month < 1 || payload.month > 12)) {
     return NextResponse.json({ error: "Month (1-12) is required for monthly overall budget." }, { status: 400 });
