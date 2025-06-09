@@ -1,7 +1,7 @@
 // apps/web/src/app/(app)/accounts/AccountForm.tsx
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,13 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -34,7 +31,7 @@ import {
     ASSET_TYPES,
     LIABILITY_TYPES
 } from '@/types/account';
-import { Loader2, DollarSign, Building, Hash, Save, Wallet } from 'lucide-react';
+import { Loader2, DollarSign, Building, Hash, Wallet } from 'lucide-react';
 
 const allAccountTypes: [WebAppAccountType, ...WebAppAccountType[]] = [...ASSET_TYPES, ...LIABILITY_TYPES];
 
@@ -67,18 +64,17 @@ const accountFormSchema = z.object({
 type AccountFormData = z.infer<typeof accountFormSchema>;
 
 interface AccountFormProps {
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  accountToEdit: WebAppAccount | null;
+  triggerButton: React.ReactElement;
+  accountToEdit?: WebAppAccount | null;
   onSaveSuccess: (account: WebAppAccount) => void;
 }
 
 export default function AccountForm({
-  isOpen,
-  onOpenChange,
+  triggerButton,
   accountToEdit,
   onSaveSuccess,
 }: AccountFormProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const {
     control,
     register,
@@ -89,28 +85,29 @@ export default function AccountForm({
     resolver: zodResolver(accountFormSchema),
     mode: 'onChange',
   });
-
-  useEffect(() => {
-    if (isOpen) {
-      if (accountToEdit) {
-        reset({
-          name: accountToEdit.name,
-          type: accountToEdit.type,
-          balance: accountToEdit.balance,
-          institution: accountToEdit.institution,
-          accountNumber: accountToEdit.accountNumber,
-        });
-      } else {
-        reset({
-          name: '',
-          type: 'checking',
-          balance: 0,
-          institution: '',
-          accountNumber: '',
-        });
-      }
+  
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+        if (accountToEdit) {
+            reset({
+              name: accountToEdit.name,
+              type: accountToEdit.type,
+              balance: accountToEdit.balance,
+              institution: accountToEdit.institution,
+              accountNumber: accountToEdit.accountNumber,
+            });
+        } else {
+            reset({
+              name: '',
+              type: 'checking',
+              balance: 0,
+              institution: '',
+              accountNumber: '',
+            });
+        }
     }
-  }, [accountToEdit, isOpen, reset]);
+    setIsOpen(open);
+  }
 
   const onSubmit = async (data: AccountFormData) => {
     const payload: WebAppCreateAccountPayload | WebAppUpdateAccountPayload = {
@@ -139,96 +136,100 @@ export default function AccountForm({
 
       toast.success(`Account "${result.data.name}" saved successfully!`);
       onSaveSuccess(result.data);
-      onOpenChange(false);
+      setIsOpen(false);
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-             <Wallet className="w-6 h-6 text-primary" />
-            {accountToEdit ? 'Edit Account' : 'Add New Account'}
-          </DialogTitle>
-          <DialogDescription>
-            Enter the details for your financial account below.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
-          <div>
-            <Label htmlFor="name">Account Name</Label>
-            <Input id="name" {...register('name')} placeholder="e.g., Everyday Savings" disabled={isSubmitting} />
-            {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+    <Popover open={isOpen} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        {triggerButton}
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="end">
+        <div className="grid gap-6">
+          <div className="space-y-1">
+            <h4 className="font-medium leading-none flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" />
+                {accountToEdit ? 'Edit Account' : 'Add New Account'}
+            </h4>
+            <p className="text-sm text-muted-foreground">
+              Enter the details for your financial account.
+            </p>
           </div>
-
-          <div>
-            <Label htmlFor="type">Account Type</Label>
-            <Controller
-              name="type"
-              control={control}
-              render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                  <SelectTrigger id="type">
-                    <SelectValue placeholder="Select an account type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Assets</SelectLabel>
-                      {ASSET_TYPES.map(type => (
-                        <SelectItem key={type} value={type}>{accountTypeLabels[type]}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Liabilities</SelectLabel>
-                      {LIABILITY_TYPES.map(type => (
-                        <SelectItem key={type} value={type}>{accountTypeLabels[type]}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.type && <p className="text-xs text-destructive mt-1">{errors.type.message}</p>}
-          </div>
-          
-          <div>
-            <Label htmlFor="balance">Current Balance</Label>
-            <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input id="balance" type="number" step="0.01" {...register('balance')} placeholder="0.00" className="pl-8" disabled={isSubmitting} />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div>
+                <Label htmlFor="name">Account Name</Label>
+                <Input id="name" {...register('name')} placeholder="e.g., Everyday Savings" disabled={isSubmitting} />
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
             </div>
-            {errors.balance && <p className="text-xs text-destructive mt-1">{errors.balance.message}</p>}
-          </div>
 
-          <div>
-            <Label htmlFor="institution" className="flex items-center gap-1.5">
-                <Building className="w-4 h-4 text-muted-foreground"/> Institution (Optional)
-            </Label>
-            <Input id="institution" {...register('institution')} placeholder="e.g., Bank of America" disabled={isSubmitting} />
-          </div>
+            <div>
+                <Label htmlFor="type">Account Type</Label>
+                <Controller
+                name="type"
+                control={control}
+                render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                    <SelectTrigger id="type">
+                        <SelectValue placeholder="Select an account type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                        <SelectLabel>Assets</SelectLabel>
+                        {ASSET_TYPES.map(type => (
+                            <SelectItem key={type} value={type}>{accountTypeLabels[type]}</SelectItem>
+                        ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                        <SelectLabel>Liabilities</SelectLabel>
+                        {LIABILITY_TYPES.map(type => (
+                            <SelectItem key={type} value={type}>{accountTypeLabels[type]}</SelectItem>
+                        ))}
+                        </SelectGroup>
+                    </SelectContent>
+                    </Select>
+                )}
+                />
+                {errors.type && <p className="text-xs text-destructive mt-1">{errors.type.message}</p>}
+            </div>
+            
+            <div>
+                <Label htmlFor="balance">Current Balance</Label>
+                <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input id="balance" type="number" step="0.01" {...register('balance')} placeholder="0.00" className="pl-8" disabled={isSubmitting} />
+                </div>
+                {errors.balance && <p className="text-xs text-destructive mt-1">{errors.balance.message}</p>}
+            </div>
 
-          <div>
-            <Label htmlFor="accountNumber" className="flex items-center gap-1.5">
-                <Hash className="w-4 h-4 text-muted-foreground"/> Account Number (Optional)
-            </Label>
-            <Input id="accountNumber" {...register('accountNumber')} placeholder="e.g., Last 4 digits" disabled={isSubmitting} />
-          </div>
+            <div>
+                <Label htmlFor="institution" className="flex items-center gap-1.5">
+                    <Building className="w-4 h-4 text-muted-foreground"/> Institution (Optional)
+                </Label>
+                <Input id="institution" {...register('institution')} placeholder="e.g., Bank of America" disabled={isSubmitting} />
+            </div>
 
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting || !isDirty || !isValid}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Save className="mr-2 h-4 w-4" />
-              {accountToEdit ? 'Save Changes' : 'Create Account'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <div>
+                <Label htmlFor="accountNumber" className="flex items-center gap-1.5">
+                    <Hash className="w-4 h-4 text-muted-foreground"/> Account Number (Optional)
+                </Label>
+                <Input id="accountNumber" {...register('accountNumber')} placeholder="e.g., Last 4 digits" disabled={isSubmitting} />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>
+                Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting || !isDirty || !isValid}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {accountToEdit ? 'Save Changes' : 'Create'}
+                </Button>
+            </div>
+          </form>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

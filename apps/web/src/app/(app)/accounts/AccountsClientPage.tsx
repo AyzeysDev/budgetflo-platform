@@ -2,9 +2,9 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins } from 'lucide-react';
+import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Accordion,
   AccordionContent,
@@ -30,6 +30,8 @@ import type { WebAppAccount, WebAppAccountType, WebAppAssetType, WebAppLiability
 import { ASSET_TYPES, LIABILITY_TYPES } from '@/types/account';
 import AccountForm from './AccountForm';
 import { Badge } from '@/components/ui/badge';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 interface AccountsClientPageProps {
   initialAccounts: WebAppAccount[];
@@ -59,11 +61,11 @@ const accountTypeConfig: Record<WebAppAccountType, { label: string; icon: React.
 const assetTypeOrder: WebAppAssetType[] = ['checking', 'savings', 'investment', 'property', 'cash', 'other_asset'];
 const liabilityTypeOrder: WebAppLiabilityType[] = ['credit_card', 'home_loan', 'car_loan', 'student_loan', 'personal_loan', 'line_of_credit', 'other_liability'];
 
+const ASSET_COLOR = "hsl(var(--chart-2))";
+const LIABILITY_COLOR = "hsl(var(--chart-5))";
 
 export default function AccountsClientPage({ initialAccounts }: AccountsClientPageProps) {
   const [accounts, setAccounts] = useState<WebAppAccount[]>(initialAccounts);
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<WebAppAccount | null>(null);
   const [accountToDelete, setAccountToDelete] = useState<WebAppAccount | null>(null);
 
   useEffect(() => {
@@ -82,6 +84,17 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
         return acc;
     }, { netWorth: 0, totalAssets: 0, totalDebts: 0 });
   }, [accounts]);
+
+  const netWorthChartData = useMemo(() => ([
+    { name: 'Total Assets', value: totalAssets, fill: ASSET_COLOR },
+    { name: 'Total Liabilities', value: totalDebts, fill: LIABILITY_COLOR },
+  ]), [totalAssets, totalDebts]);
+
+  const chartConfig = {
+    totalAssets: { label: "Assets", color: ASSET_COLOR },
+    totalLiabilities: { label: "Liabilities", color: LIABILITY_COLOR },
+  } satisfies ChartConfig;
+
 
   const groupedAssets = useMemo(() => {
     const groups: Partial<Record<WebAppAssetType, WebAppAccount[]>> = {};
@@ -106,16 +119,6 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
     }
     return groups;
   }, [accounts]);
-
-  const handleAddAccount = () => {
-    setEditingAccount(null);
-    setIsFormModalOpen(true);
-  };
-
-  const handleEditAccount = (account: WebAppAccount) => {
-    setEditingAccount(account);
-    setIsFormModalOpen(true);
-  };
 
   const handleDeleteConfirm = async () => {
     if (!accountToDelete) return;
@@ -156,27 +159,70 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
               A complete overview of your financial accounts.
             </p>
           </div>
-          <Button onClick={handleAddAccount}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Account
-          </Button>
+          <AccountForm
+            onSaveSuccess={onFormSaveSuccess}
+            triggerButton={
+                <Button>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Account
+                </Button>
+            }
+           />
         </div>
 
         <Card>
             <CardHeader>
                 <CardTitle>Net Worth Overview</CardTitle>
+                <CardDescription>A snapshot of your financial health.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                <div>
-                    <p className="text-sm text-muted-foreground">Total Assets</p>
-                    <p className="text-2xl font-semibold text-green-600">{formatCurrency(totalAssets)}</p>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div className="order-2 md:order-1 space-y-4">
+                     <div className="flex items-center p-4 rounded-lg bg-muted/50">
+                        <div className="p-3 rounded-full bg-green-500/10 text-green-500 mr-4">
+                            <ArrowUpRight className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Total Assets</p>
+                            <p className="text-2xl font-semibold">{formatCurrency(totalAssets)}</p>
+                        </div>
+                    </div>
+                     <div className="flex items-center p-4 rounded-lg bg-muted/50">
+                         <div className="p-3 rounded-full bg-red-500/10 text-red-500 mr-4">
+                            <ArrowDownRight className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Total Liabilities</p>
+                            <p className="text-2xl font-semibold">{formatCurrency(totalDebts)}</p>
+                        </div>
+                    </div>
+                     <div className="flex items-center p-4 rounded-lg bg-primary/10">
+                         <div className="p-3 rounded-full bg-primary/20 text-primary mr-4">
+                            <PieChartIcon className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-primary/80">Net Worth</p>
+                            <p className="text-2xl font-bold text-primary">{formatCurrency(netWorth)}</p>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <p className="text-sm text-muted-foreground">Total Debts</p>
-                    <p className="text-2xl font-semibold text-red-600">{formatCurrency(totalDebts)}</p>
-                </div>
-                 <div>
-                    <p className="text-sm text-muted-foreground">Net Worth</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(netWorth)}</p>
+                <div className="order-1 md:order-2">
+                    <ChartContainer config={chartConfig} className="mx-auto aspect-square h-[250px]">
+                        <PieChart>
+                            <Tooltip
+                            cursor={false}
+                            content={<ChartTooltipContent hideLabel />}
+                            />
+                            <Pie
+                                data={netWorthChartData}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius={60}
+                                strokeWidth={5}
+                                >
+                                <Cell key="cell-assets" fill={ASSET_COLOR} />
+                                <Cell key="cell-liabilities" fill={LIABILITY_COLOR} />
+                            </Pie>
+                        </PieChart>
+                    </ChartContainer>
                 </div>
             </CardContent>
         </Card>
@@ -210,13 +256,27 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                                            </div>
                                            <div className="flex items-center gap-4">
                                                <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
-                                               <DropdownMenu>
-                                                   <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                   <DropdownMenuContent align="end">
-                                                       <DropdownMenuItem onClick={() => handleEditAccount(account)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                                       <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-                                                   </DropdownMenuContent>
-                                               </DropdownMenu>
+                                                <AccountForm
+                                                    accountToEdit={account}
+                                                    onSaveSuccess={onFormSaveSuccess}
+                                                    triggerButton={
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); }}>
+                                                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
+                                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    }
+                                                />
                                            </div>
                                        </div>
                                    ))}
@@ -255,13 +315,27 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                                            </div>
                                            <div className="flex items-center gap-4">
                                                <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
-                                               <DropdownMenu>
-                                                   <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                   <DropdownMenuContent align="end">
-                                                       <DropdownMenuItem onClick={() => handleEditAccount(account)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                                       <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-                                                   </DropdownMenuContent>
-                                               </DropdownMenu>
+                                                <AccountForm
+                                                    accountToEdit={account}
+                                                    onSaveSuccess={onFormSaveSuccess}
+                                                    triggerButton={
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); }}>
+                                                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
+                                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    }
+                                                />
                                            </div>
                                        </div>
                                    ))}
@@ -273,13 +347,6 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
             </div>
         </div>
       </div>
-
-      <AccountForm 
-        isOpen={isFormModalOpen}
-        onOpenChange={setIsFormModalOpen}
-        accountToEdit={editingAccount}
-        onSaveSuccess={onFormSaveSuccess}
-      />
       
       {accountToDelete && (
         <Dialog open={!!accountToDelete} onOpenChange={() => setAccountToDelete(null)}>
