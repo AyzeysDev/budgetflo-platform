@@ -20,6 +20,7 @@ export interface Category {
 
 /**
  * Represents a user-defined budget for a specific category or an overall budget over a period.
+ * The 'isRecurring' field has been removed. Budgets are now always explicit for their period.
  */
 export interface Budget {
   id: string; // Firestore document ID
@@ -31,35 +32,20 @@ export interface Budget {
   period: 'monthly' | 'yearly' | 'custom'; // Budgeting period
   startDate: Timestamp | Date | string; // Start date of the budget period
   endDate: Timestamp | Date | string; // End date of the budget period
-  isRecurring: boolean; // Does this budget automatically renew?
   isOverall?: boolean; // True if this is an overall budget for the period, false/undefined for category-specific.
   notes?: string | null;
   createdAt: Timestamp | Date | string;
   updatedAt: Timestamp | Date | string;
 }
 
-/**
- * NEW: Represents the single recurring overall monthly budget template for a user.
- * Stored in a separate `recurringBudgets` collection with the document ID being the userId.
- */
-export interface RecurringBudget {
-  userId: string; // Document ID in this collection
-  amount: number;
-  period: 'monthly'; // For now, only monthly recurring is implemented
-  active: boolean; // User can enable/disable this recurring template
-  updatedAt: Timestamp | Date | string;
-}
-
-
 // --- Payloads for API requests ---
 
 export interface CreateCategoryPayload {
-  // userId is derived from authenticated user on the backend, not part of client payload directly to service
   name: string;
   type: 'income' | 'expense';
   icon?: string | null;
   color?: string | null;
-  includeInBudget?: boolean; // Optional in payload
+  includeInBudget?: boolean;
 }
 
 export interface UpdateCategoryPayload {
@@ -67,54 +53,44 @@ export interface UpdateCategoryPayload {
   type?: 'income' | 'expense';
   icon?: string | null;
   color?: string | null;
-  includeInBudget?: boolean; // Optional in payload
+  includeInBudget?: boolean;
 }
 
 export interface CreateBudgetPayload {
-  // userId is derived from authenticated user
   name: string;
-  categoryId?: string | null; // Optional for overall budget
+  categoryId?: string | null;
   amount: number;
   period: 'monthly' | 'yearly' | 'custom';
   startDate: string; // Expect ISO date string from client
-  endDate: string;   // Expect ISO date string from client
-  isRecurring: boolean;
+  endDate: string;   // Expect ISO date string
   isOverall?: boolean;
   notes?: string | null;
 }
 
 export interface UpdateBudgetPayload {
   name?: string;
-  categoryId?: string | null; // Optional for overall budget
+  categoryId?: string | null;
   amount?: number;
   period?: 'monthly' | 'yearly' | 'custom';
-  startDate?: string; // Expect ISO date string
-  endDate?: string;   // Expect ISO date string
-  isRecurring?: boolean;
-  isOverall?: boolean; // Allow updating this if necessary, though typically set on creation
+  startDate?: string;
+  endDate?: string;
+  isOverall?: boolean;
   notes?: string | null;
-  // spentAmount should not be directly updatable by user, it's calculated
 }
 
 // --- Data Transfer Objects (DTOs) for API responses ---
 
-/**
- * Data Transfer Object for a Category.
- * Timestamps are converted to ISO strings.
- * Optional fields from Category (icon, color, isSystemCategory) are defined with their expected DTO types.
- * includeInBudget is non-optional in DTO, defaulted by service layer if undefined in model.
- */
 export interface CategoryDTO {
   id: string;
-  userId: string; // Explicitly included for clarity
+  userId: string;
   name: string;
   type: 'income' | 'expense';
   icon: string | null;
   color: string | null;
-  includeInBudget: boolean; // Non-optional in DTO, service defaults if Category.includeInBudget is undefined
-  isSystemCategory: boolean; // Non-optional in DTO (defaults to false if undefined in source)
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
+  includeInBudget: boolean;
+  isSystemCategory: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BudgetDTO extends Omit<Budget, 'createdAt' | 'updatedAt' | 'startDate' | 'endDate'> {
@@ -122,7 +98,6 @@ export interface BudgetDTO extends Omit<Budget, 'createdAt' | 'updatedAt' | 'sta
   updatedAt: string;
   startDate: string;
   endDate: string;
-  isOverall: boolean; // Ensure this is always present in DTO, defaulting to false
-  categoryId: string | null; // Ensure categoryId can be null in DTO
-  source?: 'explicit' | 'recurring'; // NEW: Indicates the origin of the budget data
+  isOverall: boolean;
+  categoryId: string | null;
 }

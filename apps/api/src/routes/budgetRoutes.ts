@@ -23,7 +23,6 @@ const commonBudgetValidationRules = [
       }
       return true;
     }),
-  body('isRecurring').isBoolean().withMessage('isRecurring must be a boolean.'),
   body('notes').optional({ nullable: true, checkFalsy: true }).isString().isLength({ max: 500 }).withMessage('Notes maximum 500 characters.'),
   body('isOverall').optional().isBoolean().withMessage('isOverall must be a boolean.'),
   body('categoryId').optional({ nullable: true, checkFalsy: true }).isString().withMessage('Category ID must be a string if provided.')
@@ -49,26 +48,18 @@ const updateBudgetValidationRules = [
   body('endDate').optional().isISO8601().toDate().withMessage('Valid end date is required if provided.')
     .custom((value, { req }) => {
       const startDate = req.body.startDate ? new Date(req.body.startDate) : null;
-      // Only validate if both are present or if endDate is present and implies a startDate from existing record (harder to validate here without fetching)
       if (startDate && new Date(value) < startDate) {
         throw new Error('End date must be on or after start date.');
       }
       return true;
     }),
-  body('isRecurring').optional().isBoolean().withMessage('isRecurring must be a boolean.'),
   body('notes').optional({ nullable: true, checkFalsy: true }).isString().isLength({ max: 500 }).withMessage('Notes maximum 500 characters.'),
   body('isOverall').optional().isBoolean().withMessage('isOverall must be a boolean.'),
   body('categoryId').optional({ nullable: true, checkFalsy: true }).isString().withMessage('Category ID must be a string if provided.')
     .custom((value, { req }) => {
-      // This custom validation might be tricky for updates if isOverall is not part of the payload
-      // but categoryId is. Assuming if isOverall is updated, categoryId logic is handled.
       if (req.body.isOverall === true && value) {
         throw new Error('categoryId should not be provided or should be null for an overall budget update.');
       }
-      // If isOverall is explicitly false or not provided, and categoryId is being set to empty, that's an issue.
-      // if ((req.body.isOverall === false || req.body.isOverall === undefined) && value === '') {
-      //   throw new Error('categoryId is required for category-specific budgets.');
-      // }
       return true;
     }),
 ];
@@ -79,7 +70,6 @@ const overallBudgetPayloadValidation = [
     body('year').isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
     body('month').optional().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required for monthly period.'),
     body('notes').optional({ nullable: true, checkFalsy: true }).isString().isLength({ max: 500 }).withMessage('Notes maximum 500 characters.'),
-    body('isRecurring').isBoolean().withMessage('isRecurring must be a boolean value.'),
 ];
 
 
@@ -107,8 +97,8 @@ router.post(
       res.status(400).json({ error: "User ID missing from route parameters." });
       return;
     }
-    const { amount, period, year, month, notes, isRecurring } = req.body;
-    const budget = await budgetService.setOverallBudget(userId, { amount, period, year, month, notes, isRecurring });
+    const { amount, period, year, month, notes } = req.body;
+    const budget = await budgetService.setOverallBudget(userId, { amount, period, year, month, notes });
     res.status(budget ? 200 : 201).json({ message: 'Overall budget set/updated successfully.', data: budget });
   })
 );
@@ -134,9 +124,7 @@ router.get(
     const { period, year, month } = req.query as { period: 'monthly' | 'yearly', year: string, month?: string };
     const budget = await budgetService.getOverallBudgetForPeriod(userId, period, parseInt(year), month ? parseInt(month) : undefined);
     
-    // The service now returns the DTO with the source, so no extra logic needed here.
     if (!budget) {
-      // It's not an error to not have a budget, just return an empty data object or specific message
       res.status(200).json({ message: 'Overall budget not set for the specified period.', data: null });
       return;
     }

@@ -1,7 +1,7 @@
 // apps/web/src/app/api/budgets/[budgetId]/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import type { WebAppUpdateBudgetPayload } from '@/types/budget'; // Ensure this path is correct
+import type { WebAppUpdateBudgetPayload } from '@/types/budget';
 
 const expressApiUrl = process.env.EXPRESS_API_URL;
 const nextAuthSecret = process.env.NEXTAUTH_SECRET;
@@ -25,7 +25,7 @@ if (!expressApiUrl) {
 }
 
 interface Context {
-  params: { // No need for Promise here as Next.js resolves it
+  params: {
     budgetId: string;
   };
 }
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params; // Directly access params
+  const { budgetId } = params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params; // Directly access params
+  const { budgetId } = params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
@@ -149,7 +149,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params; // Directly access params
+  const { budgetId } = params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
@@ -161,16 +161,15 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     const response = await fetch(targetUrl, {
       method: 'DELETE',
       headers: {
-        'Content-Type': 'application/json', // Though not strictly needed for DELETE body-less
+        'Content-Type': 'application/json',
         'X-Authenticated-User-Id': userId,
       },
     });
 
-    if (response.status === 204) { // Successfully deleted, no content
+    if (response.status === 204) {
       return new NextResponse(null, { status: 204 });
     }
     
-    // Handle other potential responses if backend sends a body on DELETE errors
     const responseBody = await response.text();
     let data;
     try {
@@ -185,7 +184,6 @@ export async function DELETE(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: data.error || 'Failed to delete budget via backend.' }, { status: response.status });
     }
     
-    // Should ideally be a 204, but if backend sends 200 with body:
     return NextResponse.json(data, { status: response.status });
 
   } catch (error) {

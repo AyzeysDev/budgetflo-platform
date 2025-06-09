@@ -29,11 +29,10 @@ import type { WebAppBudget, WebAppCategory, WebAppCreateBudgetPayload, WebAppUpd
 import { Loader2, DollarSign, CalendarDays, Tag, Info, Save } from 'lucide-react';
 import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
 
-// Schema for the budget form (category-specific)
 const budgetFormSchema = z.object({
   name: z.string().min(1, "Budget name is required").max(150, "Name too long"),
   categoryId: z.string().min(1, "Category is required"),
-  amount: z.coerce // Use z.coerce for automatic string to number conversion
+  amount: z.coerce
     .number({invalid_type_error: "Amount must be a valid number."})
     .min(0.01, "Amount must be greater than 0."),
   notes: z.string().max(500, "Notes too long").optional().nullable(),
@@ -72,7 +71,7 @@ export default function BudgetForm({
     defaultValues: {
       name: '',
       categoryId: '',
-      amount: undefined, // Initialize as undefined to show placeholder
+      amount: undefined,
       notes: '',
     },
   });
@@ -126,11 +125,10 @@ export default function BudgetForm({
     const apiPayload: WebAppCreateBudgetPayload | WebAppUpdateBudgetPayload = {
       name: data.name,
       categoryId: data.categoryId,
-      amount: data.amount, // data.amount is a number here due to z.coerce.number()
+      amount: data.amount,
       period: 'monthly',
       startDate,
       endDate,
-      isRecurring: budgetToEdit?.isRecurring || false,
       isOverall: false,
       notes: data.notes || null,
     };
@@ -249,17 +247,15 @@ export default function BudgetForm({
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         <Input
                             id="amount"
-                            type="text" // Changed to text to allow better control with parseFloat and empty state
-                            inputMode="decimal" // Hint for mobile keyboards
+                            type="text"
+                            inputMode="decimal"
                             step="0.01"
                             {...field}
                             onChange={(e) => {
                                 const val = e.target.value;
-                                // RHF expects the raw value or a converted one if you handle it strictly.
-                                // Zod coerce will handle the conversion.
                                 field.onChange(val);
                             }}
-                            value={field.value === undefined ? '' : String(field.value)} // Control input value for empty state
+                            value={field.value === undefined ? '' : String(field.value)}
                             placeholder="0.00"
                             className="pl-9 h-10"
                             disabled={isSubmitting}

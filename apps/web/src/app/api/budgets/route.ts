@@ -1,7 +1,7 @@
 // apps/web/src/app/api/budgets/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import type { WebAppCreateBudgetPayload } from '@/types/budget'; // Ensure this path is correct
+import type { WebAppCreateBudgetPayload } from '@/types/budget';
 
 const expressApiUrl = process.env.EXPRESS_API_URL;
 const nextAuthSecret = process.env.NEXTAUTH_SECRET;
@@ -99,11 +99,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body: Malformed JSON.' }, { status: 400 });
   }
 
-  // Basic validation, more detailed validation is on the backend
+  // Basic validation
   if (!payload.name || !payload.amount || payload.amount <= 0 || !payload.period || !payload.startDate || !payload.endDate) {
     return NextResponse.json({ error: "Missing required fields for budget creation." }, { status: 400 });
   }
-  // For category-specific budgets, categoryId is required and isOverall should be false or undefined.
   if ((payload.isOverall === undefined || payload.isOverall === false) && !payload.categoryId) {
     return NextResponse.json({ error: "categoryId is required for category-specific budgets." }, { status: 400 });
   }

@@ -16,15 +16,10 @@ import {
   ChevronUp,
   BarChartBig,
   ListChecks,
-  Eye,
-  EyeOff,
-  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -54,6 +49,7 @@ import {
   Tooltip as RechartsTooltip,
   Cell
 } from 'recharts';
+import BudgetForm from './BudgetForm';
 
 interface BudgetsClientPageProps {
   initialOverallBudget: WebAppBudget | null;
@@ -70,7 +66,6 @@ const overallBudgetFormSchema = z.object({
         invalid_type_error: "Budget amount must be a valid number."
     })
     .min(0.01, "Amount must be greater than 0."),
-  isRecurring: z.boolean(),
 });
 type OverallBudgetFormData = z.infer<typeof overallBudgetFormSchema>;
 
@@ -97,9 +92,10 @@ interface CategoryBudgetRowProps {
   onSave: (categoryId: string, amount: number) => Promise<void>;
   onDelete: (budget: WebAppBudget) => void;
   isSaving: boolean;
+  onEdit: (budget: WebAppBudget) => void;
 }
 
-function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: CategoryBudgetRowProps) {
+function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving, onEdit }: CategoryBudgetRowProps) {
   const [amountInput, setAmountInput] = useState<string>(budget?.amount?.toString() || '');
   const [inputError, setInputError] = useState<string | null>(null);
 
@@ -121,9 +117,10 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: Cat
   const spent = budget?.spentAmount || 0;
   const budgetedAmount = budget?.amount || 0;
   const progress = budgetedAmount > 0 ? Math.min((spent / budgetedAmount) * 100, 100) : 0;
+  const isBudgetSet = !!budget;
 
   return (
-    <div className="p-3.5 border rounded-lg bg-card hover:shadow-md transition-shadow flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+    <div className="p-3 border rounded-lg bg-card hover:shadow-md transition-shadow flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
       <div
         className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 self-start sm:self-center"
         style={{ backgroundColor: category.color || '#6B7280' }}
@@ -152,8 +149,9 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: Cat
               disabled={isSaving}
             />
           </div>
-          <Button size="sm" onClick={handleSave} disabled={isSaving || amountInput === (budget?.amount?.toString() || '')} className="h-9 px-3">
+          <Button size="sm" onClick={handleSave} disabled={isSaving || (isBudgetSet && amountInput === (budget?.amount?.toString() || ''))} className="h-9 px-3">
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span className="sr-only">Save Budget</span>
           </Button>
         </div>
         {inputError && <p className="text-xs text-destructive mt-1">{inputError}</p>}
@@ -165,9 +163,16 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: Cat
         )}
       </div>
       {budget && (
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive shrink-0 self-start sm:self-center" onClick={() => onDelete(budget)} disabled={isSaving}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1 self-start sm:self-center">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => onEdit(budget)} disabled={isSaving}>
+                <Settings2 className="h-4 w-4" />
+                <span className="sr-only">Edit Budget Details</span>
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(budget)} disabled={isSaving}>
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete Budget</span>
+            </Button>
+        </div>
       )}
     </div>
   );
@@ -184,11 +189,12 @@ export default function BudgetsClientPage({
   const [period, setPeriod] = useState({ year: initialYear, month: initialMonth });
   const [overallBudget, setOverallBudget] = useState<WebAppBudget | null>(initialOverallBudget);
   const [categoryBudgets, setCategoryBudgets] = useState<WebAppBudget[]>(initialCategoryBudgets);
-  const [showCategoryBudgetsSection, setShowCategoryBudgetsSection] = useState(false);
   const [isSubmittingOverall, setIsSubmittingOverall] = useState(false);
   const [budgetToDelete, setBudgetToDelete] = useState<WebAppBudget | null>(null);
   const [isSavingCategoryBudget, setIsSavingCategoryBudget] = useState<string | null>(null);
   const [isLoadingPageData, setIsLoadingPageData] = useState(false);
+  const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<WebAppBudget | null>(null);
 
   const {
     control: overallControl,
@@ -199,7 +205,6 @@ export default function BudgetsClientPage({
     resolver: zodResolver(overallBudgetFormSchema),
     defaultValues: {
       amount: initialOverallBudget?.amount ?? undefined,
-      isRecurring: initialOverallBudget?.isRecurring ?? false,
     },
   });
 
@@ -225,7 +230,6 @@ export default function BudgetsClientPage({
         setOverallBudget(newOverallBudget);
         resetOverallForm({
             amount: newOverallBudget?.amount || undefined,
-            isRecurring: newOverallBudget?.isRecurring || false
         });
 
         setCategoryBudgets((categoryResult.data as WebAppBudget[] || []).sort((a, b) => a.name.localeCompare(b.name)));
@@ -247,7 +251,6 @@ export default function BudgetsClientPage({
     setOverallBudget(initialOverallBudget);
     resetOverallForm({
       amount: initialOverallBudget?.amount,
-      isRecurring: initialOverallBudget?.isRecurring ?? false,
     });
   }, [initialOverallBudget, resetOverallForm]);
 
@@ -281,7 +284,6 @@ export default function BudgetsClientPage({
       year: period.year,
       month: period.month,
       notes: overallBudget?.notes || null,
-      isRecurring: data.isRecurring,
     };
     try {
       const response = await fetch('/api/budgets/overall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -292,7 +294,6 @@ export default function BudgetsClientPage({
       setOverallBudget(updatedBudget);
       resetOverallForm({
           amount: updatedBudget.amount,
-          isRecurring: updatedBudget.isRecurring,
       });
       toast.success("Overall budget saved!");
     } catch (error) {
@@ -313,7 +314,7 @@ export default function BudgetsClientPage({
   }, [overallBudget]);
 
   const categoryRadarChartData = useMemo(() => {
-    if (!showCategoryBudgetsSection || categoryBudgets.length === 0) return [];
+    if (categoryBudgets.length === 0) return [];
     let maxBudgetedAmongAll = 1;
     categoryBudgets.forEach(b => {
         if (b.amount > maxBudgetedAmongAll) maxBudgetedAmongAll = b.amount;
@@ -329,7 +330,7 @@ export default function BudgetsClientPage({
         fill: category?.color || '#8884d8',
       };
     });
-  }, [categoryBudgets, budgetableCategories, showCategoryBudgetsSection]);
+  }, [categoryBudgets, budgetableCategories]);
   
   const handleSaveCategoryBudget = async (categoryId: string, amount: number) => {
     setIsSavingCategoryBudget(categoryId);
@@ -342,18 +343,20 @@ export default function BudgetsClientPage({
     }
 
     const toastId = toast.loading(`${existingBudget ? 'Updating' : 'Creating'} budget for ${category.name}...`);
-
-    const payload: WebAppCreateBudgetPayload | WebAppUpdateBudgetPayload = {
-      name: existingBudget?.name || `${category.name} Budget - ${selectedPeriodDisplay}`,
-      categoryId: categoryId,
-      amount: amount,
-      period: 'monthly',
-      startDate: new Date(period.year, period.month - 1, 1).toISOString(),
-      endDate: new Date(period.year, period.month, 0, 23, 59, 59, 999).toISOString(),
-      isRecurring: existingBudget?.isRecurring || false,
-      isOverall: false,
-      notes: existingBudget?.notes || null,
-    };
+    
+    // Create new budget from scratch
+    const newBudgetName = `${category.name} Budget - ${selectedPeriodDisplay}`;
+    const payload: WebAppCreateBudgetPayload | WebAppUpdateBudgetPayload = existingBudget 
+        ? { amount } // Only update amount from this inline form
+        : {
+            name: newBudgetName,
+            categoryId: categoryId,
+            amount: amount,
+            period: 'monthly',
+            startDate: new Date(period.year, period.month - 1, 1).toISOString(),
+            endDate: new Date(period.year, period.month, 0, 23, 59, 59, 999).toISOString(),
+            isOverall: false,
+        };
 
     const url = existingBudget ? `/api/budgets/${existingBudget.id}` : `/api/budgets`;
     const method = existingBudget ? 'PUT' : 'POST';
@@ -367,7 +370,7 @@ export default function BudgetsClientPage({
       const savedBudget = result.data as WebAppBudget;
       setCategoryBudgets(prev => {
         const updated = existingBudget ? prev.map(b => b.id === savedBudget.id ? savedBudget : b) : [...prev, savedBudget];
-        return updated.sort((a, b) => a.name.localeCompare(b.name));
+        return updated.sort((a, b) => (budgetableCategories.find(c => c.id === a.categoryId)?.name || '').localeCompare(budgetableCategories.find(c => c.id === b.categoryId)?.name || ''));
       });
       toast.success(`Budget for ${category.name} saved!`);
     } catch (error) {
@@ -398,6 +401,20 @@ export default function BudgetsClientPage({
       setIsSavingCategoryBudget(null);
     }
   };
+  
+  const handleEditBudget = (budget: WebAppBudget) => {
+    setEditingBudget(budget);
+    setIsBudgetFormOpen(true);
+  };
+
+  const handleBudgetFormSaveSuccess = (savedBudget: WebAppBudget) => {
+    setCategoryBudgets(prev => {
+      const updated = editingBudget ? prev.map(b => b.id === savedBudget.id ? savedBudget : b) : [...prev, savedBudget];
+      return updated.sort((a, b) => (budgetableCategories.find(c => c.id === a.categoryId)?.name || '').localeCompare(budgetableCategories.find(c => c.id === b.categoryId)?.name || ''));
+    });
+    setEditingBudget(null);
+    setIsBudgetFormOpen(false);
+  };
 
   const totalCategoryBudgetedAmount = useMemo(() => {
     return categoryBudgets.reduce((sum, budget) => sum + budget.amount, 0);
@@ -405,7 +422,7 @@ export default function BudgetsClientPage({
 
   const budgetComparisonMessage = useMemo(() => {
     if (!overallBudget) return { message: "Set an overall budget to compare.", type: "info" as const, icon: Info };
-    if (!showCategoryBudgetsSection || categoryBudgets.length === 0) return { message: "Enable and set category budgets for comparison.", type: "info" as const, icon: Info};
+    if (categoryBudgets.length === 0) return { message: "Set category budgets for comparison.", type: "info" as const, icon: Info};
 
     const difference = overallBudget.amount - totalCategoryBudgetedAmount;
     if (Math.abs(difference) < 0.01) {
@@ -415,7 +432,7 @@ export default function BudgetsClientPage({
     } else {
       return { message: `Category budgets exceed overall by ${formatCurrency(Math.abs(difference))}.`, type: "warning" as const, icon: AlertCircle };
     }
-  }, [overallBudget, totalCategoryBudgetedAmount, categoryBudgets.length, showCategoryBudgetsSection]);
+  }, [overallBudget, totalCategoryBudgetedAmount, categoryBudgets.length]);
 
 
   return (
@@ -446,12 +463,7 @@ export default function BudgetsClientPage({
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <DollarSign className="h-6 w-6 text-primary" /> Overall Monthly Budget
                 </CardTitle>
-                 {overallBudget?.source === 'recurring' && (
-                    <CardDescription className="flex items-center gap-1.5 text-xs text-blue-600 mt-1">
-                        <History className="h-3 w-3" />
-                        Using recurring budget template. Any changes will create an explicit budget for this month.
-                    </CardDescription>
-                )}
+                <CardDescription>Set your total spending limit for all categories this month.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-3">
@@ -478,20 +490,9 @@ export default function BudgetsClientPage({
                   />
                   {overallErrors.amount && <p className="text-sm text-destructive mt-1">{overallErrors.amount.message}</p>}
                   
-                   <Controller
-                    name="isRecurring"
-                    control={overallControl}
-                    render={({ field }) => (
-                      <div className="flex items-center space-x-2 pt-2">
-                        <Switch id="isRecurring" checked={field.value} onCheckedChange={field.onChange} disabled={isSubmittingOverall || isLoadingPageData} />
-                        <Label htmlFor="isRecurring" className="text-sm font-medium">Set as recurring monthly budget</Label>
-                      </div>
-                    )}
-                  />
-                  
                   <Button type="submit" size="lg" className="w-full h-11" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
                     {isSubmittingOverall ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                    {overallBudget?.source === 'explicit' ? 'Update Budget' : 'Set Budget'}
+                    {overallBudget ? 'Update Budget' : 'Set Budget'}
                   </Button>
                 </form>
               </CardContent>
@@ -519,7 +520,7 @@ export default function BudgetsClientPage({
                     </RadialBar>
                      <RechartsTooltip
                         cursor={{fill: 'transparent'}}
-                        contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', boxShadow: 'hsl(var(--shadow-md))' }}
+                        contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem' }}
                         formatter={(value, name, props) => [`${formatCurrency(props.payload.amount)} (${Number(value).toFixed(0)}%)`, name]}
                       />
                   </RadialBarChart>
@@ -538,33 +539,9 @@ export default function BudgetsClientPage({
           </div>
         </Card>
 
-        <div className="flex items-center justify-between pt-4 pb-2">
-          <div className="flex items-center space-x-3">
-            <Switch
-              id="show-category-budgets-toggle"
-              checked={showCategoryBudgetsSection}
-              onCheckedChange={setShowCategoryBudgetsSection}
-              aria-label="Toggle category budgets visibility"
-            />
-            <Label htmlFor="show-category-budgets-toggle" className="text-lg font-semibold cursor-pointer flex items-center gap-2">
-             {showCategoryBudgetsSection ? <EyeOff className="h-5 w-5 text-muted-foreground"/> : <Eye className="h-5 w-5 text-muted-foreground"/>}
-              {showCategoryBudgetsSection ? 'Hide' : 'Show'} Category Budgets
-            </Label>
-          </div>
-          {showCategoryBudgetsSection && (
-            <p className={cn("text-sm flex items-center gap-1.5 p-2 rounded-md border",
-              budgetComparisonMessage.type === 'success' && "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/20 dark:border-green-700 dark:text-green-400",
-              budgetComparisonMessage.type === 'info' && "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-400",
-              budgetComparisonMessage.type === 'warning' && "bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950/20 dark:border-yellow-700 dark:text-yellow-400"
-            )}>
-              <budgetComparisonMessage.icon className="h-4 w-4 shrink-0" />
-              {budgetComparisonMessage.message}
-            </p>
-          )}
-        </div>
+        <div className="pt-4" />
 
-        {showCategoryBudgetsSection && (
-          <Card className="shadow-lg">
+        <Card className="shadow-lg">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,_3fr)_minmax(0,_2fr)]">
               <div className="p-6 border-b lg:border-b-0 lg:border-r border-border">
                 <CardHeader className="p-0 mb-4">
@@ -590,6 +567,7 @@ export default function BudgetsClientPage({
                           onSave={handleSaveCategoryBudget}
                           onDelete={setBudgetToDelete}
                           isSaving={isSavingCategoryBudget === category.id}
+                          onEdit={handleEditBudget}
                         />
                       ))}
                     </div>
@@ -608,7 +586,7 @@ export default function BudgetsClientPage({
                       <Radar name="Budgeted" dataKey="budgeted" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.5} />
                       <Radar name="Spent" dataKey="spent" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.4} />
                        <RechartsTooltip
-                        contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', boxShadow: 'hsl(var(--shadow-md))' }}
+                        contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem' }}
                         formatter={(value) => formatCurrency(Number(value))} />
                       <RechartsLegend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}}/>
                     </RadarChart>
@@ -630,10 +608,17 @@ export default function BudgetsClientPage({
                 {budgetComparisonMessage.message}
               </CardFooter>
           </Card>
-        )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      <BudgetForm
+        isOpen={isBudgetFormOpen}
+        onOpenChange={setIsBudgetFormOpen}
+        budgetToEdit={editingBudget}
+        onSaveSuccess={handleBudgetFormSaveSuccess}
+        budgetableCategories={budgetableCategories}
+        currentPeriod={period}
+      />
+
       {budgetToDelete && (
         <Dialog open={!!budgetToDelete} onOpenChange={() => setBudgetToDelete(null)}>
           <DialogContent className="sm:max-w-md">

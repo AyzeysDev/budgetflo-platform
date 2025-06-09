@@ -5,11 +5,10 @@ import {
   CreateBudgetPayload,
   UpdateBudgetPayload,
   BudgetDTO,
-  CategoryDTO, // Added for category validation
-  RecurringBudget
+  CategoryDTO,
 } from '../models/budget.model';
-import { Timestamp, FieldValue, CollectionReference, WriteBatch } from 'firebase-admin/firestore';
-import { getCategoryById } from './categoryService'; // To validate category existence
+import { Timestamp, FieldValue, CollectionReference } from 'firebase-admin/firestore';
+import { getCategoryById } from './categoryService';
 
 if (!firebaseInitialized || !firestore) {
   console.error("BudgetService: Firebase is not initialized. Budget operations will fail.");
@@ -22,14 +21,7 @@ const getBudgetsCollection = (): CollectionReference<Budget> => {
   return firestore.collection('budgets') as CollectionReference<Budget>;
 };
 
-const getRecurringBudgetsCollection = (): CollectionReference<RecurringBudget> => {
-    if (!firestore) {
-        throw new Error("Firestore is not initialized. Cannot access recurringBudgets collection.");
-    }
-    return firestore.collection('recurringBudgets') as CollectionReference<RecurringBudget>;
-}
-
-function convertBudgetToDTO(budgetData: Budget | undefined, source?: 'explicit' | 'recurring'): BudgetDTO | null {
+function convertBudgetToDTO(budgetData: Budget | undefined): BudgetDTO | null {
   if (!budgetData) return null;
 
   const dto: BudgetDTO = {
@@ -42,12 +34,10 @@ function convertBudgetToDTO(budgetData: Budget | undefined, source?: 'explicit' 
     period: budgetData.period,
     startDate: budgetData.startDate instanceof Timestamp ? budgetData.startDate.toDate().toISOString() : String(budgetData.startDate),
     endDate: budgetData.endDate instanceof Timestamp ? budgetData.endDate.toDate().toISOString() : String(budgetData.endDate),
-    isRecurring: budgetData.isRecurring,
     isOverall: budgetData.isOverall || false,
     notes: budgetData.notes || null,
     createdAt: budgetData.createdAt instanceof Timestamp ? budgetData.createdAt.toDate().toISOString() : String(budgetData.createdAt),
     updatedAt: budgetData.updatedAt instanceof Timestamp ? budgetData.updatedAt.toDate().toISOString() : String(budgetData.updatedAt),
-    source: source || 'explicit',
   };
   return dto;
 }
@@ -88,7 +78,6 @@ export async function createBudget(userId: string, payload: CreateBudgetPayload)
     period: payload.period,
     startDate: Timestamp.fromDate(new Date(payload.startDate)),
     endDate: Timestamp.fromDate(new Date(payload.endDate)),
-    isRecurring: payload.isRecurring,
     isOverall: payload.isOverall || false,
     notes: payload.notes || null,
     createdAt: now,
@@ -233,7 +222,6 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
     if (dataToUpdate.startDate && dataToUpdate.endDate && (dataToUpdate.endDate as Timestamp) < (dataToUpdate.startDate as Timestamp)) {
         throw new Error("End date must be on or after start date.");
     }
-    if (payload.isRecurring !== undefined && payload.isRecurring !== existingBudget.isRecurring) { dataToUpdate.isRecurring = payload.isRecurring; hasChanges = true; }
     if (payload.notes !== undefined && payload.notes !== existingBudget.notes) { dataToUpdate.notes = payload.notes; hasChanges = true; }
     
     let finalIsOverall = existingBudget.isOverall;
@@ -309,11 +297,9 @@ export async function deleteBudget(budgetId: string, userId: string): Promise<bo
 
 export async function setOverallBudget(
   userId: string,
-  payload: { amount: number; period: 'monthly' | 'yearly'; year: number; month?: number; notes?: string | null; isRecurring: boolean; }
+  payload: { amount: number; period: 'monthly' | 'yearly'; year: number; month?: number; notes?: string | null; }
 ): Promise<BudgetDTO | null> {
     const budgetsCollection = getBudgetsCollection();
-    const recurringBudgetsCollection = getRecurringBudgetsCollection();
-    const recurringBudgetRef = recurringBudgetsCollection.doc(userId);
 
     if (payload.amount <= 0) {
         throw new Error("Overall budget amount must be positive.");
@@ -331,46 +317,26 @@ export async function setOverallBudget(
         endDate = new Date(payload.year, payload.month, 0, 23, 59, 59, 999);
         budgetName = `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${payload.year}`;
     } else {
-        throw new Error("Only monthly recurring budgets are supported at this time.");
+        throw new Error("Only monthly budgets are supported at this time.");
     }
 
+    const explicitBudgetQuery = budgetsCollection
+        .where('userId', '==', userId)
+        .where('isOverall', '==', true)
+        .where('startDate', '==', Timestamp.fromDate(startDate));
+    
+    const explicitBudgetSnapshot = await explicitBudgetQuery.get();
+    const existingExplicitBudgetDoc = explicitBudgetSnapshot.docs[0];
+
     try {
-        if (!firestore) {
-            throw new Error("Firestore is not initialized. Cannot perform batch operations.");
-        }
-        const batch = firestore.batch();
-        const recurringDoc = await recurringBudgetRef.get();
-
-        if (payload.isRecurring) {
-            const recurringData: RecurringBudget = {
-                userId,
-                amount: payload.amount,
-                period: 'monthly',
-                active: true,
-                updatedAt: FieldValue.serverTimestamp() as Timestamp
-            };
-            batch.set(recurringBudgetRef, recurringData, { merge: true });
-        } else {
-            if (recurringDoc.exists) {
-                batch.update(recurringBudgetRef, { active: false, updatedAt: FieldValue.serverTimestamp() });
-            }
-        }
-
-        const explicitBudgetQuery = budgetsCollection
-            .where('userId', '==', userId)
-            .where('isOverall', '==', true)
-            .where('startDate', '==', Timestamp.fromDate(startDate));
-        
-        const explicitBudgetSnapshot = await explicitBudgetQuery.get();
-        const existingExplicitBudgetDoc = explicitBudgetSnapshot.docs[0];
-
         if (existingExplicitBudgetDoc) {
-            batch.update(existingExplicitBudgetDoc.ref, { 
+            await existingExplicitBudgetDoc.ref.update({ 
                 amount: payload.amount, 
                 notes: payload.notes || null,
-                isRecurring: payload.isRecurring,
                 updatedAt: FieldValue.serverTimestamp()
             });
+            const updatedDoc = await existingExplicitBudgetDoc.ref.get();
+            return convertBudgetToDTO(updatedDoc.data());
         } else {
             const newBudgetRef = budgetsCollection.doc();
             const newBudgetData: Budget = {
@@ -383,18 +349,15 @@ export async function setOverallBudget(
                 period: 'monthly',
                 startDate: Timestamp.fromDate(startDate),
                 endDate: Timestamp.fromDate(endDate),
-                isRecurring: payload.isRecurring,
                 isOverall: true,
                 notes: payload.notes || null,
                 createdAt: FieldValue.serverTimestamp() as Timestamp,
                 updatedAt: FieldValue.serverTimestamp() as Timestamp,
             };
-            batch.set(newBudgetRef, newBudgetData);
+            await newBudgetRef.set(newBudgetData);
+            const newDoc = await newBudgetRef.get();
+            return convertBudgetToDTO(newDoc.data());
         }
-
-        await batch.commit();
-
-        return getOverallBudgetForPeriod(userId, 'monthly', payload.year, payload.month);
     } catch (error) {
         console.error("Error in setOverallBudget operation:", error);
         throw new Error("Failed to set overall budget.");
@@ -416,7 +379,6 @@ export async function getOverallBudgetForPeriod(
         throw new Error("Month is required for getOverallBudgetForPeriod.");
     }
     const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
     const query = budgetsCollection
         .where('userId', '==', userId)
@@ -426,39 +388,11 @@ export async function getOverallBudgetForPeriod(
     const snapshot = await query.get();
     if (!snapshot.empty) {
         const explicitBudget = snapshot.docs[0].data();
-        return convertBudgetToDTO(explicitBudget, 'explicit');
+        return convertBudgetToDTO(explicitBudget);
     }
-
-    const recurringBudgetsCollection = getRecurringBudgetsCollection();
-    const recurringBudgetRef = recurringBudgetsCollection.doc(userId);
-    const recurringDoc = await recurringBudgetRef.get();
-
-    if (recurringDoc.exists) {
-        const recurringData = recurringDoc.data() as RecurringBudget;
-        if (recurringData.active) {
-            const budgetFromRecurring: Budget = {
-                id: `recurring-${userId}-${year}-${month}`,
-                userId: userId,
-                name: `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${year}`,
-                categoryId: null,
-                amount: recurringData.amount,
-                spentAmount: 0,
-                period: 'monthly',
-                startDate: Timestamp.fromDate(startDate),
-                endDate: Timestamp.fromDate(endDate),
-                isRecurring: true,
-                isOverall: true,
-                notes: "This budget is based on your recurring template.",
-                createdAt: recurringData.updatedAt,
-                updatedAt: recurringData.updatedAt,
-            };
-            return convertBudgetToDTO(budgetFromRecurring, 'recurring');
-        }
-    }
-
-    return null;
+    
+    return null; // No recurring fallback
 }
-
 
 export async function updateBudgetSpentAmount(
   budgetId: string,

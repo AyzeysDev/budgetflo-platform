@@ -9,12 +9,13 @@ export interface WebAppCategory {
   icon: string | null;
   color: string | null;
   includeInBudget: boolean;
-  isSystemCategory: boolean; // Changed from optional to non-optional
+  isSystemCategory: boolean;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
 }
 
-// Corresponds to BudgetDTO from the backend
+// Corresponds to BudgetDTO from the backend.
+// 'isRecurring' and 'source' fields have been removed.
 export interface WebAppBudget {
   id: string;
   userId: string;
@@ -25,16 +26,15 @@ export interface WebAppBudget {
   period: 'monthly' | 'yearly' | 'custom';
   startDate: string; // ISO date string
   endDate: string;   // ISO date string
-  isRecurring: boolean;
   isOverall: boolean; // True if this is an overall budget
   notes: string | null;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   category?: WebAppCategory; // Optional: populated on the client for display
-  source?: 'explicit' | 'recurring'; // NEW: To know if the budget is from a template
 }
 
 // Payload for creating a new budget (overall or category-specific) via BFF
+// 'isRecurring' has been removed.
 export interface WebAppCreateBudgetPayload {
   name: string;
   categoryId?: string | null;
@@ -42,12 +42,12 @@ export interface WebAppCreateBudgetPayload {
   period: 'monthly' | 'yearly' | 'custom';
   startDate: string; // ISO date string
   endDate: string;   // ISO date string
-  isRecurring: boolean;
   isOverall?: boolean;
   notes?: string | null;
 }
 
 // Payload for updating an existing budget via BFF
+// 'isRecurring' has been removed.
 export interface WebAppUpdateBudgetPayload {
   name?: string;
   categoryId?: string | null;
@@ -55,19 +55,18 @@ export interface WebAppUpdateBudgetPayload {
   period?: 'monthly' | 'yearly' | 'custom';
   startDate?: string;
   endDate?: string;
-  isRecurring?: boolean;
   isOverall?: boolean;
   notes?: string | null;
 }
 
 // Payload for setting/updating the overall budget via BFF
+// 'isRecurring' has been removed.
 export interface WebAppSetOverallBudgetPayload {
     amount: number;
     period: 'monthly' | 'yearly'; // Overall budgets are typically monthly or yearly
     year: number;
     month?: number; // 1-12, required if period is 'monthly'
     notes?: string | null;
-    isRecurring: boolean; // NEW: Added to payload
 }
 
 // Represents a budget item for display, especially for category budgets
