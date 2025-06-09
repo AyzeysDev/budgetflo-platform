@@ -6,7 +6,7 @@ import {
   Menu,
   PiggyBank,
   LayoutDashboard,
-  Wallet, // Icon for Budgets
+  Wallet,
   CreditCard,
   TrendingUp,
   PieChartIcon,
@@ -16,6 +16,7 @@ import {
   FileText,
   Target,
   Tags,
+  Landmark, // Added for Accounts
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,10 +41,10 @@ interface NavItem {
   section?: string;
 }
 
-// Updated mainNavItemsMobile to include "Budgets" under "Management"
 const mainNavItemsMobile: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
-  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" }, // Added Budgets
+  { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" }, // New Accounts Link
+  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
   { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },

@@ -5,6 +5,7 @@ import cors from 'cors';
 import userRoutes from './routes/userRoutes';
 import categoryRoutes from './routes/categoryRoutes'; 
 import budgetRoutes from './routes/budgetRoutes'; 
+import accountRoutes from './routes/accountRoutes'; // Import account routes
 import { firebaseInitialized } from './config/firebase';
 
 dotenv.config();
@@ -30,36 +31,35 @@ app.get('/api', (req: Request, res: Response) => {
 app.use('/api/users', userRoutes); 
 
 // Corrected Authentication Middleware
-function authenticateUserForScopedResources(req: Request, res: Response, next: NextFunction): void { // Return type is void
+function authenticateUserForScopedResources(req: Request, res: Response, next: NextFunction): void {
   const authenticatedUserId = req.headers['x-authenticated-user-id'] as string; 
   const requestedUserIdInParams = req.params.userId;
 
   if (!authenticatedUserId) {
     console.warn(`[Auth Middleware] Access to /api/users/${requestedUserIdInParams}/* denied: Missing X-Authenticated-User-Id header (placeholder).`);
-    // Send response and then return to stop further execution in this middleware
     res.status(401).json({ error: "Unauthorized: Authentication token required." });
     return; 
   }
   
   if (authenticatedUserId !== requestedUserIdInParams) {
     console.warn(`[Auth Middleware] Forbidden: User ${authenticatedUserId} attempted to access resources for user ${requestedUserIdInParams}.`);
-    // Send response and then return
     res.status(403).json({ error: "Forbidden: You do not have permission to access this resource." });
     return; 
   }
   
   console.log(`[Auth Middleware] User ${authenticatedUserId} authorized for /api/users/${requestedUserIdInParams}/*`);
-  next(); // Proceed to the next middleware or route handler
+  next();
 }
 
 const userScopedRouter = express.Router({ mergeParams: true });
 userScopedRouter.use('/categories', categoryRoutes);
-userScopedRouter.use('/budgets', budgetRoutes); 
+userScopedRouter.use('/budgets', budgetRoutes);
+userScopedRouter.use('/accounts', accountRoutes); // Add account routes to the scoped router
 
 app.use('/api/users/:userId', authenticateUserForScopedResources, userScopedRouter);
 
 // Global Error Handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Added next, though not used, it's standard
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error("Global Error Handler caught an error:", err.message);
   if (process.env.NODE_ENV === 'development') {
     console.error(err.stack); 
@@ -83,7 +83,6 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Ad
     errorMessage = 'An internal server error occurred.';
   }
 
-  // Ensure response is only sent if headers haven't been sent yet
   if (!res.headersSent) {
     res.status(statusCode).json({
       error: errorMessage,
@@ -91,10 +90,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Ad
       ...(process.env.NODE_ENV === 'development' && statusCode === 500 && { stack: err.stack }),
     });
   } else {
-    // If headers already sent, delegate to default Express error handler
-    // This typically happens if an error occurs during streaming or after a response has started.
     console.error("Global Error Handler: Headers already sent, cannot send error JSON response.");
-    // next(err); // Uncomment if you want Express's default handler to take over (might terminate connection)
   }
 });
 
