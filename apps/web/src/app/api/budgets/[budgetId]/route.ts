@@ -41,7 +41,7 @@ export async function GET(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params;
+  const { budgetId } = await params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params;
+  const { budgetId } = await params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
@@ -149,7 +149,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized: User not authenticated." }, { status: 401 });
   }
 
-  const { budgetId } = params;
+  const { budgetId } = await params;
   if (!budgetId || typeof budgetId !== 'string') {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }

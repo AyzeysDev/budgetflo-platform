@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   BarChartBig,
-  ListChecks
+  ListChecks,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -50,6 +50,7 @@ import {
   Cell
 } from 'recharts';
 import BudgetForm from './BudgetForm';
+import { MonthYearPicker } from './MonthYearPicker';
 
 interface BudgetsClientPageProps {
   initialOverallBudget: WebAppBudget | null;
@@ -212,8 +213,6 @@ export default function BudgetsClientPage({
 
   const fetchBudgetDataForPeriod = useCallback(async (year: number, month: number) => {
     setIsLoadingPageData(true);
-    // Removed toast.loading here
-
     try {
         const [overallRes, categoryRes] = await Promise.all([
             fetch(`/api/budgets/overall?period=monthly&year=${year}&month=${month}`),
@@ -451,7 +450,11 @@ export default function BudgetsClientPage({
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => changeMonth('prev')} disabled={isLoadingPageData}><ChevronUp className="-rotate-90 h-4 w-4" /></Button>
-            <span className="text-sm font-medium text-foreground min-w-[130px] text-center">{selectedPeriodDisplay}</span>
+            <MonthYearPicker
+              currentPeriod={period}
+              onPeriodChange={setPeriod}
+              disabled={isLoadingPageData}
+            />
             <Button variant="outline" size="icon" onClick={() => changeMonth('next')} disabled={isLoadingPageData}><ChevronDown className="-rotate-90 h-4 w-4" /></Button>
           </div>
         </div>
