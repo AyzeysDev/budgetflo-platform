@@ -1,7 +1,7 @@
 // apps/web/src/app/(app)/accounts/AccountForm.tsx
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,10 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -64,17 +68,18 @@ const accountFormSchema = z.object({
 type AccountFormData = z.infer<typeof accountFormSchema>;
 
 interface AccountFormProps {
-  triggerButton: React.ReactElement;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
   accountToEdit?: WebAppAccount | null;
   onSaveSuccess: (account: WebAppAccount) => void;
 }
 
 export default function AccountForm({
-  triggerButton,
+  isOpen,
+  onOpenChange,
   accountToEdit,
   onSaveSuccess,
 }: AccountFormProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const {
     control,
     register,
@@ -86,8 +91,8 @@ export default function AccountForm({
     mode: 'onChange',
   });
   
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
+  useEffect(() => {
+    if (isOpen) {
         if (accountToEdit) {
             reset({
               name: accountToEdit.name,
@@ -106,8 +111,7 @@ export default function AccountForm({
             });
         }
     }
-    setIsOpen(open);
-  }
+  }, [isOpen, accountToEdit, reset]);
 
   const onSubmit = async (data: AccountFormData) => {
     const payload: WebAppCreateAccountPayload | WebAppUpdateAccountPayload = {
@@ -136,36 +140,32 @@ export default function AccountForm({
 
       toast.success(`Account "${result.data.name}" saved successfully!`);
       onSaveSuccess(result.data);
-      setIsOpen(false);
+      onOpenChange(false); // Close dialog on success
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
     }
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        {triggerButton}
-      </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
-        <div className="grid gap-6">
-          <div className="space-y-1">
-            <h4 className="font-medium leading-none flex items-center gap-2">
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="pr-6">
+            <DialogTitle className="flex items-center gap-2 text-lg">
                 <Wallet className="w-5 h-5 text-primary" />
                 {accountToEdit ? 'Edit Account' : 'Add New Account'}
-            </h4>
-            <p className="text-sm text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription>
               Enter the details for your financial account.
-            </p>
-          </div>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
+            </DialogDescription>
+        </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 pt-4">
+            <div className="space-y-1.5">
                 <Label htmlFor="name">Account Name</Label>
                 <Input id="name" {...register('name')} placeholder="e.g., Everyday Savings" disabled={isSubmitting} />
                 {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
             </div>
 
-            <div>
+            <div className="space-y-1.5">
                 <Label htmlFor="type">Account Type</Label>
                 <Controller
                 name="type"
@@ -195,7 +195,7 @@ export default function AccountForm({
                 {errors.type && <p className="text-xs text-destructive mt-1">{errors.type.message}</p>}
             </div>
             
-            <div>
+            <div className="space-y-1.5">
                 <Label htmlFor="balance">Current Balance</Label>
                 <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -204,32 +204,33 @@ export default function AccountForm({
                 {errors.balance && <p className="text-xs text-destructive mt-1">{errors.balance.message}</p>}
             </div>
 
-            <div>
+            <div className="space-y-1.5">
                 <Label htmlFor="institution" className="flex items-center gap-1.5">
                     <Building className="w-4 h-4 text-muted-foreground"/> Institution (Optional)
                 </Label>
                 <Input id="institution" {...register('institution')} placeholder="e.g., Bank of America" disabled={isSubmitting} />
             </div>
 
-            <div>
+            <div className="space-y-1.5">
                 <Label htmlFor="accountNumber" className="flex items-center gap-1.5">
                     <Hash className="w-4 h-4 text-muted-foreground"/> Account Number (Optional)
                 </Label>
                 <Input id="accountNumber" {...register('accountNumber')} placeholder="e.g., Last 4 digits" disabled={isSubmitting} />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>
-                Cancel
-                </Button>
+            <DialogFooter className="pt-4">
+                <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={isSubmitting}>
+                        Cancel
+                    </Button>
+                </DialogClose>
                 <Button type="submit" disabled={isSubmitting || !isDirty || !isValid}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {accountToEdit ? 'Save Changes' : 'Create'}
                 </Button>
-            </div>
+            </DialogFooter>
           </form>
-        </div>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, WalletCards } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -31,7 +31,7 @@ import { ASSET_TYPES, LIABILITY_TYPES } from '@/types/account';
 import AccountForm from './AccountForm';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Tooltip } from 'recharts';
 
 interface AccountsClientPageProps {
   initialAccounts: WebAppAccount[];
@@ -61,16 +61,28 @@ const accountTypeConfig: Record<WebAppAccountType, { label: string; icon: React.
 const assetTypeOrder: WebAppAssetType[] = ['checking', 'savings', 'investment', 'property', 'cash', 'other_asset'];
 const liabilityTypeOrder: WebAppLiabilityType[] = ['credit_card', 'home_loan', 'car_loan', 'student_loan', 'personal_loan', 'line_of_credit', 'other_liability'];
 
-const ASSET_COLOR = "hsl(var(--chart-2))";
-const LIABILITY_COLOR = "hsl(var(--chart-5))";
+const ASSET_COLOR = "#02a141";
+const LIABILITY_COLOR = "#990f0f";
 
 export default function AccountsClientPage({ initialAccounts }: AccountsClientPageProps) {
   const [accounts, setAccounts] = useState<WebAppAccount[]>(initialAccounts);
   const [accountToDelete, setAccountToDelete] = useState<WebAppAccount | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<WebAppAccount | null>(null);
 
   useEffect(() => {
     setAccounts(initialAccounts);
   }, [initialAccounts]);
+  
+  const handleAddClick = () => {
+    setEditingAccount(null);
+    setIsFormOpen(true);
+  }
+
+  const handleEditClick = (account: WebAppAccount) => {
+    setEditingAccount(account);
+    setIsFormOpen(true);
+  }
 
   const { netWorth, totalAssets, totalDebts } = useMemo(() => {
     return accounts.reduce((acc, account) => {
@@ -85,14 +97,16 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
     }, { netWorth: 0, totalAssets: 0, totalDebts: 0 });
   }, [accounts]);
 
-  const netWorthChartData = useMemo(() => ([
-    { name: 'Total Assets', value: totalAssets, fill: ASSET_COLOR },
-    { name: 'Total Liabilities', value: totalDebts, fill: LIABILITY_COLOR },
-  ]), [totalAssets, totalDebts]);
+  const netWorthChartData = useMemo(() => {
+    const data = [];
+    if (totalAssets > 0) data.push({ name: 'Total Assets', value: totalAssets, fill: ASSET_COLOR });
+    if (totalDebts > 0) data.push({ name: 'Total Liabilities', value: totalDebts, fill: LIABILITY_COLOR });
+    return data;
+  }, [totalAssets, totalDebts]);
 
   const chartConfig = {
-    totalAssets: { label: "Assets", color: ASSET_COLOR },
-    totalLiabilities: { label: "Liabilities", color: LIABILITY_COLOR },
+    "Total Assets": { label: "Assets", color: ASSET_COLOR },
+    "Total Liabilities": { label: "Liabilities", color: LIABILITY_COLOR },
   } satisfies ChartConfig;
 
 
@@ -147,26 +161,29 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
         }
         return [...prev, savedAccount];
     });
+    setIsFormOpen(false); // Close the form on success
   };
+  
+  const hasAssets = Object.keys(groupedAssets).length > 0;
+  const hasLiabilities = Object.keys(groupedLiabilities).length > 0;
+
 
   return (
     <>
       <div className="flex flex-col gap-6 md:gap-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Accounts</h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
+              <Landmark className="h-8 w-8 text-primary" />
+              Accounts
+            </h1>
             <p className="text-md text-muted-foreground mt-1">
               A complete overview of your financial accounts.
             </p>
           </div>
-          <AccountForm
-            onSaveSuccess={onFormSaveSuccess}
-            triggerButton={
-                <Button>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add Account
-                </Button>
-            }
-           />
+          <Button onClick={handleAddClick}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Account
+          </Button>
         </div>
 
         <Card>
@@ -174,55 +191,63 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                 <CardTitle>Net Worth Overview</CardTitle>
                 <CardDescription>A snapshot of your financial health.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="order-2 md:order-1 space-y-4">
-                     <div className="flex items-center p-4 rounded-lg bg-muted/50">
-                        <div className="p-3 rounded-full bg-green-500/10 text-green-500 mr-4">
-                            <ArrowUpRight className="h-6 w-6" />
+            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                <div className="space-y-3">
+                     <div className="flex items-center p-3 rounded-lg bg-muted/50 border">
+                        <div className="p-2.5 rounded-full bg-green-600/10 text-green-600 dark:text-green-400 mr-3">
+                            <ArrowUpRight className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Assets</p>
-                            <p className="text-2xl font-semibold">{formatCurrency(totalAssets)}</p>
+                            <p className="text-xl font-semibold">{formatCurrency(totalAssets)}</p>
                         </div>
                     </div>
-                     <div className="flex items-center p-4 rounded-lg bg-muted/50">
-                         <div className="p-3 rounded-full bg-red-500/10 text-red-500 mr-4">
-                            <ArrowDownRight className="h-6 w-6" />
+                     <div className="flex items-center p-3 rounded-lg bg-muted/50 border">
+                         <div className="p-2.5 rounded-full bg-red-600/10 text-red-600 dark:text-red-400 mr-3">
+                            <ArrowDownRight className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Liabilities</p>
-                            <p className="text-2xl font-semibold">{formatCurrency(totalDebts)}</p>
+                            <p className="text-xl font-semibold">{formatCurrency(totalDebts)}</p>
                         </div>
                     </div>
-                     <div className="flex items-center p-4 rounded-lg bg-primary/10">
-                         <div className="p-3 rounded-full bg-primary/20 text-primary mr-4">
-                            <PieChartIcon className="h-6 w-6" />
+                     <div className="flex items-center p-3 rounded-lg bg-primary/10 border border-primary/20">
+                         <div className="p-2.5 rounded-full bg-primary/20 text-primary mr-3">
+                            <PieChartIcon className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-sm text-primary/80">Net Worth</p>
-                            <p className="text-2xl font-bold text-primary">{formatCurrency(netWorth)}</p>
+                            <p className="text-xl font-bold text-primary">{formatCurrency(netWorth)}</p>
                         </div>
                     </div>
                 </div>
-                <div className="order-1 md:order-2">
-                    <ChartContainer config={chartConfig} className="mx-auto aspect-square h-[250px]">
-                        <PieChart>
-                            <Tooltip
-                            cursor={false}
-                            content={<ChartTooltipContent hideLabel />}
-                            />
-                            <Pie
-                                data={netWorthChartData}
-                                dataKey="value"
-                                nameKey="name"
-                                innerRadius={60}
-                                strokeWidth={5}
-                                >
-                                <Cell key="cell-assets" fill={ASSET_COLOR} />
-                                <Cell key="cell-liabilities" fill={LIABILITY_COLOR} />
-                            </Pie>
-                        </PieChart>
-                    </ChartContainer>
+                <div className="flex items-center justify-center min-h-[250px]">
+                    {netWorthChartData.length > 0 ? (
+                        <ChartContainer config={chartConfig} className="mx-auto aspect-square h-[250px]">
+                            <PieChart>
+                                <Tooltip
+                                    cursor={false}
+                                    content={<ChartTooltipContent hideLabel />}
+                                />
+                                <Pie
+                                    data={netWorthChartData}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    innerRadius={80}
+                                    outerRadius={110}
+                                    cornerRadius={8}
+                                    paddingAngle={5}
+                                    strokeWidth={2}
+                                />
+                            </PieChart>
+                        </ChartContainer>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8">
+                            <PieChartIcon className="h-12 w-12 mb-3 opacity-50" />
+                            <p className="font-semibold text-base">Net Worth Breakdown</p>
+                            <p className="text-xs max-w-xs">Add your first asset or liability account to visualize your financial standing.</p>
+                        </div>
+                    )}
                 </div>
             </CardContent>
         </Card>
@@ -230,123 +255,141 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-6">
                 <h2 className="text-2xl font-semibold tracking-tight">Assets</h2>
-                <Accordion type="multiple" defaultValue={assetTypeOrder.filter(type => groupedAssets[type])} className="w-full">
-                    {assetTypeOrder.map(type => {
-                        const accountsForType = groupedAssets[type];
-                        if (!accountsForType || accountsForType.length === 0) return null;
-                        const { label, icon: Icon } = accountTypeConfig[type];
-                        const typeTotal = accountsForType.reduce((sum, acc) => sum + acc.balance, 0);
+                {!hasAssets ? (
+                    <Card className="flex flex-col items-center justify-center p-8 text-center border-dashed">
+                        <WalletCards className="h-12 w-12 text-muted-foreground mb-4" />
+                        <CardTitle className="text-lg font-medium">No Asset Accounts</CardTitle>
+                        <CardDescription className="mt-1">Add a checking, savings, or investment account to get started.</CardDescription>
+                    </Card>
+                ) : (
+                    <Accordion type="multiple" defaultValue={assetTypeOrder.filter(type => groupedAssets[type])} className="w-full">
+                        {assetTypeOrder.map(type => {
+                            const accountsForType = groupedAssets[type];
+                            if (!accountsForType || accountsForType.length === 0) return null;
+                            const { label, icon: Icon } = accountTypeConfig[type];
+                            const typeTotal = accountsForType.reduce((sum, acc) => sum + acc.balance, 0);
 
-                        return (
-                            <AccordionItem value={type} key={type}>
-                                <AccordionTrigger className="text-lg font-medium hover:no-underline px-2">
-                                   <div className="flex items-center gap-3">
-                                    <Icon className="h-5 w-5 text-muted-foreground" />
-                                    <span>{label}</span>
-                                    <Badge variant="secondary">{accountsForType.length}</Badge>
-                                   </div>
-                                   <span className="text-lg font-semibold text-green-600">{formatCurrency(typeTotal)}</span>
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                   {accountsForType.map(account => (
-                                       <div key={account.accountId} className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50">
-                                           <div className="flex items-center gap-3">
-                                              <div className="text-foreground font-medium">{account.name}</div>
-                                              {account.institution && <Badge variant="outline" className="hidden sm:inline-flex">{account.institution}</Badge>}
-                                           </div>
-                                           <div className="flex items-center gap-4">
-                                               <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
-                                                <AccountForm
-                                                    accountToEdit={account}
-                                                    onSaveSuccess={onFormSaveSuccess}
-                                                    triggerButton={
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                                    <MoreVertical className="h-4 w-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); }}>
-                                                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
-                                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    }
-                                                />
-                                           </div>
-                                       </div>
-                                   ))}
-                                </AccordionContent>
-                            </AccordionItem>
-                        )
-                    })}
-                </Accordion>
+                            return (
+                                <AccordionItem value={type} key={type}>
+                                    <AccordionTrigger className="text-lg font-medium hover:no-underline px-2">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <Icon className="h-5 w-5 text-muted-foreground" />
+                                            <span>{label}</span>
+                                            <Badge variant="secondary">{accountsForType.length}</Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg font-semibold text-green-600 dark:text-green-400">{formatCurrency(typeTotal)}</span>
+                                            <div className="w-8" /> 
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                    {accountsForType.map(account => (
+                                        <div key={account.accountId} className="flex items-center p-3 rounded-md hover:bg-muted/50">
+                                            <div className="flex items-center gap-3 flex-1">
+                                                <div className="text-foreground font-medium">{account.name}</div>
+                                                {account.institution && <Badge variant="outline" className="hidden sm:inline-flex">{account.institution}</Badge>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                <MoreVertical className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onSelect={() => handleEditClick(account)}>
+                                                                <Edit className="mr-2 h-4 w-4" /> Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
+                                                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            )
+                        })}
+                    </Accordion>
+                )}
             </div>
 
              <div className="space-y-6">
                 <h2 className="text-2xl font-semibold tracking-tight">Liabilities</h2>
-                <Accordion type="multiple" defaultValue={liabilityTypeOrder.filter(type => groupedLiabilities[type])} className="w-full">
-                     {liabilityTypeOrder.map(type => {
-                        const accountsForType = groupedLiabilities[type];
-                        if (!accountsForType || accountsForType.length === 0) return null;
-                        const { label, icon: Icon } = accountTypeConfig[type];
-                        const typeTotal = accountsForType.reduce((sum, acc) => sum + acc.balance, 0);
+                 {!hasLiabilities ? (
+                    <Card className="flex flex-col items-center justify-center p-8 text-center border-dashed">
+                        <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
+                        <CardTitle className="text-lg font-medium">No Liability Accounts</CardTitle>
+                        <CardDescription className="mt-1">Add a credit card, loan, or other liability to see the full picture.</CardDescription>
+                    </Card>
+                ) : (
+                    <Accordion type="multiple" defaultValue={liabilityTypeOrder.filter(type => groupedLiabilities[type])} className="w-full">
+                        {liabilityTypeOrder.map(type => {
+                            const accountsForType = groupedLiabilities[type];
+                            if (!accountsForType || accountsForType.length === 0) return null;
+                            const { label, icon: Icon } = accountTypeConfig[type];
+                            const typeTotal = accountsForType.reduce((sum, acc) => sum + acc.balance, 0);
 
-                        return (
-                            <AccordionItem value={type} key={type}>
-                                <AccordionTrigger className="text-lg font-medium hover:no-underline px-2">
-                                   <div className="flex items-center gap-3">
-                                    <Icon className="h-5 w-5 text-muted-foreground" />
-                                    <span>{label}</span>
-                                    <Badge variant="secondary">{accountsForType.length}</Badge>
-                                   </div>
-                                   <span className="text-lg font-semibold text-red-600">{formatCurrency(typeTotal)}</span>
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                   {accountsForType.map(account => (
-                                       <div key={account.accountId} className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50">
-                                           <div className="flex items-center gap-3">
-                                              <div className="text-foreground font-medium">{account.name}</div>
-                                              {account.institution && <Badge variant="outline" className="hidden sm:inline-flex">{account.institution}</Badge>}
-                                           </div>
-                                           <div className="flex items-center gap-4">
-                                               <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
-                                                <AccountForm
-                                                    accountToEdit={account}
-                                                    onSaveSuccess={onFormSaveSuccess}
-                                                    triggerButton={
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                                    <MoreVertical className="h-4 w-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); }}>
-                                                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
-                                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    }
-                                                />
-                                           </div>
-                                       </div>
-                                   ))}
-                                </AccordionContent>
-                            </AccordionItem>
-                        )
-                    })}
-                </Accordion>
+                            return (
+                                <AccordionItem value={type} key={type}>
+                                    <AccordionTrigger className="text-lg font-medium hover:no-underline px-2">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <Icon className="h-5 w-5 text-muted-foreground" />
+                                        <span>{label}</span>
+                                        <Badge variant="secondary">{accountsForType.length}</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(typeTotal)}</span>
+                                        <div className="w-8" />
+                                    </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                    {accountsForType.map(account => (
+                                        <div key={account.accountId} className="flex items-center p-3 rounded-md hover:bg-muted/50">
+                                            <div className="flex items-center gap-3 flex-1">
+                                                <div className="text-foreground font-medium">{account.name}</div>
+                                                {account.institution && <Badge variant="outline" className="hidden sm:inline-flex">{account.institution}</Badge>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-semibold text-foreground">{formatCurrency(account.balance)}</div>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                <MoreVertical className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onSelect={() => handleEditClick(account)}>
+                                                                <Edit className="mr-2 h-4 w-4" /> Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setAccountToDelete(account)} className="text-destructive focus:text-destructive">
+                                                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            )
+                        })}
+                    </Accordion>
+                )}
             </div>
         </div>
       </div>
+      
+      {/* Reusable Form Dialog */}
+      <AccountForm 
+        isOpen={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        accountToEdit={editingAccount}
+        onSaveSuccess={onFormSaveSuccess}
+      />
       
       {accountToDelete && (
         <Dialog open={!!accountToDelete} onOpenChange={() => setAccountToDelete(null)}>

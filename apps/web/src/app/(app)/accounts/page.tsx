@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import type { WebAppAccount } from '@/types/account';
 import AccountsClientPage from './AccountsClientPage';
-import { AlertTriangleIcon } from 'lucide-react';
+import { AlertTriangleIcon } from 'lucide-react'; // Added Landmark
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
