@@ -38,15 +38,17 @@ import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  PolarAngleAxis,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Label,
+  LabelList,
   PolarGrid,
   PolarRadiusAxis,
-  Radar,
-  RadarChart,
   RadialBar,
   RadialBarChart,
-  Label,
-  Legend as RechartsLegend
+  XAxis,
+  YAxis,
 } from 'recharts';
 import {
   ChartContainer,
@@ -310,45 +312,36 @@ export default function BudgetsClientPage({
   };
   
   const overallBudgetChartData = useMemo(() => {
-    if (!overallBudget || !overallBudget.amount || overallBudget.amount <= 0) {
-      return [{ name: 'Not Set', value: 0, fill: "var(--color-notSet)" }];
-    }
-    const spent = overallBudget.spentAmount || 0;
-    const isOverspent = spent > overallBudget.amount;
-    const percentageSpent = isOverspent ? 100 : (spent / overallBudget.amount) * 100;
-    const key = isOverspent ? 'overspent' : 'spent';
-    return [{ name: key, value: percentageSpent, fill: `var(--color-${key})` }];
-  }, [overallBudget]);
-  
+    return [{ value: 100 }];
+  }, []);
+
   const overallBudgetChartConfig = {
-    spent: { label: 'Spent', color: 'hsl(var(--chart-1))' },
-    overspent: { label: 'Overspent', color: 'hsl(var(--destructive))' },
+    budgeted: { label: 'Budgeted', color: 'hsl(var(--chart-2))' }, // Green color
     notSet: { label: 'Not Set', color: 'hsl(var(--muted))' }
   } satisfies ChartConfig;
-
-
-  const categoryRadarChartData = useMemo(() => {
-    if (categoryBudgets.length === 0) return [];
-    let maxBudgetedAmongAll = 1;
-    categoryBudgets.forEach(b => {
-        if (b.amount > maxBudgetedAmongAll) maxBudgetedAmongAll = b.amount;
-    });
-
-    return categoryBudgets.map(budget => {
-      const category = budgetableCategories.find(c => c.id === budget.categoryId);
+  
+  const categoryBarChartData = useMemo(() => {
+    return budgetableCategories.map(category => {
+      const budget = categoryBudgets.find(b => b.categoryId === category.id);
       return {
-        subject: category?.name || budget.name,
-        budgeted: budget.amount,
-        spent: budget.spentAmount || 0,
-        fullMark: maxBudgetedAmongAll,
+        name: category.name,
+        amount: budget?.amount || 0,
+        fill: category.color || 'hsl(var(--muted))',
       };
-    });
+    }).filter(item => item.amount > 0); // Only show categories with a set budget
   }, [categoryBudgets, budgetableCategories]);
   
-  const radarChartConfig: ChartConfig = {
-    budgeted: { label: 'Budgeted', color: 'hsl(var(--chart-2))' },
-    spent: { label: 'Spent', color: 'hsl(var(--chart-1))' },
-  };
+  const categoryBarChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    categoryBarChartData.forEach(item => {
+      config[item.name] = {
+        label: item.name,
+        color: item.fill,
+      };
+    });
+    config.label = { color: "hsl(var(--background))" };
+    return config;
+  }, [categoryBarChartData]);
   
   const handleSaveCategoryBudget = async (categoryId: string, amount: number) => {
     setIsSavingCategoryBudget(categoryId);
@@ -478,8 +471,8 @@ export default function BudgetsClientPage({
 
         {/* ROW 1: Overall Budget Card & Radial Chart */}
         <Card className="shadow-lg">
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] lg:grid-cols-2">
-            <div className="p-6 border-b md:border-b-0 md:border-r border-border flex flex-col">
+          <div className="grid grid-cols-1 md:grid-cols-2">
+            <div className="pt-0 pl-8 pr-6 p-6 border-b md:border-b-0 md:border-r border-border flex flex-col">
               <CardHeader className="p-0 mb-4 items-start">
                 <CardTitle className="text-xl">Overall Monthly Budget</CardTitle>
                 <CardDescription>Your total spending limit for the month.</CardDescription>
@@ -516,51 +509,62 @@ export default function BudgetsClientPage({
                 </form>
               </CardContent>
             </div>
-            <div className="flex flex-col flex-1 items-center justify-center p-6 bg-muted/30 md:rounded-r-lg min-h-[280px]">
-              <ChartContainer
-                  config={overallBudgetChartConfig}
-                  className="mx-auto aspect-square h-[220px]"
-              >
-                  <RadialBarChart
-                      data={overallBudgetChartData}
-                      endAngle={overallBudgetChartData[0]?.value}
-                      innerRadius={80}
-                      outerRadius={100}
-                  >
-                      <PolarGrid
-                          gridType="circle"
-                          radialLines={false}
-                          stroke="none"
-                          className="first:fill-muted last:fill-background"
-                          polarRadius={[86, 74]}
-                      />
-                      <RadialBar dataKey="value" background cornerRadius={5} />
-                      <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
-                          <Label
-                              content={({ viewBox }) => {
-                                  if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                                      const spent = overallBudget?.spentAmount || 0;
-                                      return (
-                                        <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
-                                            <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
-                                                {formatCurrency(spent)}
-                                            </tspan>
-                                            <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 22} className="fill-muted-foreground text-sm">
-                                                Spent
-                                            </tspan>
-                                        </text>
-                                      )
-                                  }
-                              }}
-                          />
-                      </PolarRadiusAxis>
-                  </RadialBarChart>
-              </ChartContainer>
-               <CardFooter className="flex-col gap-1 text-sm p-0 mt-4">
-                  <div className="leading-none text-muted-foreground">
-                    Budget: {formatCurrency(overallBudget?.amount || 0)}
-                  </div>
-              </CardFooter>
+            <div className="flex flex-col items-center justify-center p-8 lg:p-12 bg-muted/30 md:rounded-r-lg min-h-[280px]">
+                <ChartContainer
+                    config={overallBudgetChartConfig}
+                    className="mx-auto aspect-square h-[220px]"
+                >
+                    <RadialBarChart
+                        data={overallBudgetChartData}
+                        startAngle={-90}
+                        endAngle={overallBudget ? 270 : -90} // Animate from -90 to 270 if set
+                        innerRadius="80%"
+                        outerRadius="100%"
+                    >
+                        <PolarGrid
+                            gridType="circle"
+                            radialLines={false}
+                            stroke="none"
+                            className="first:fill-muted last:fill-background"
+                        />
+                        <RadialBar
+                            dataKey="value"
+                            background
+                            cornerRadius={5}
+                            className={cn(
+                                "fill-green-500",
+                                !overallBudget && "fill-muted"
+                            )}
+                        />
+                        <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
+                            <Label
+                                content={({ viewBox }) => {
+                                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                        return (
+                                          <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                                              {overallBudget ? (
+                                                  <>
+                                                      <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
+                                                          {formatCurrency(overallBudget.amount)}
+                                                      </tspan>
+                                                      <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 22} className="fill-muted-foreground text-sm">
+                                                          Budget Set
+                                                      </tspan>
+                                                  </>
+                                              ) : (
+                                                  <tspan x={viewBox.cx} y={viewBox.cy} className="fill-muted-foreground text-center font-medium">
+                                                      BUDGET
+                                                      <tspan x={viewBox.cx} dy="1.2em">TO BE SET</tspan>
+                                                  </tspan>
+                                              )}
+                                          </text>
+                                        )
+                                    }
+                                }}
+                            />
+                        </PolarRadiusAxis>
+                    </RadialBarChart>
+                </ChartContainer>
             </div>
           </div>
         </Card>
@@ -569,7 +573,7 @@ export default function BudgetsClientPage({
 
         <Card className="shadow-lg">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,_3fr)_minmax(0,_2fr)]">
-              <div className="p-6 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
+              <div className="pt-0 pl-8 pr-6 pb-6 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
                 <CardHeader className="p-0 mb-4">
                   <CardTitle className="text-lg font-semibold flex items-center gap-2">
                      <ListChecks className="h-5 w-5 text-primary" /> Allocated by Category
@@ -603,36 +607,48 @@ export default function BudgetsClientPage({
                 </CardContent>
               </div>
 
-              <div className="p-6 bg-muted/20 md:rounded-r-lg flex flex-col items-center justify-center min-h-[350px] lg:min-h-full">
-                <h3 className="text-md font-semibold mb-2 text-center text-foreground">Category Budget vs. Spent</h3>
-                {categoryRadarChartData.length > 0 ? (
-                  <ChartContainer config={radarChartConfig} className="mx-auto aspect-square h-[350px]">
-                    <RadarChart data={categoryRadarChartData}>
-                        <ChartTooltip
-                            cursor={false}
-                            content={<ChartTooltipContent indicator="line" />}
-                        />
-                        <PolarGrid className="fill-background stroke-border" />
-                        <PolarAngleAxis dataKey="subject" className="text-xs" />
-                        <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} className="text-xs" />
-                        <Radar
-                            name="Budgeted"
-                            dataKey="budgeted"
-                            fill="var(--color-budgeted)"
-                            fillOpacity={0.6}
-                            stroke="var(--color-budgeted)"
-                            strokeWidth={2}
-                        />
-                        <Radar
-                            name="Spent"
-                            dataKey="spent"
-                            fill="var(--color-spent)"
-                            fillOpacity={0.7}
-                            stroke="var(--color-spent)"
-                            strokeWidth={2}
-                        />
-                        <RechartsLegend wrapperStyle={{fontSize: '12px', paddingTop: '20px'}}/>
-                    </RadarChart>
+              <div className="p-8 lg:p-12 bg-muted/20 md:rounded-r-lg flex flex-col items-center justify-center min-h-[350px] lg:min-h-full">
+                <h3 className="text-md font-semibold mb-4 text-center text-foreground">Category Budgets Breakdown</h3>
+                {categoryBarChartData.length > 0 ? (
+                  <ChartContainer config={categoryBarChartConfig} className="w-full h-[400px]">
+                      <BarChart
+                          accessibilityLayer
+                          data={categoryBarChartData}
+                          layout="vertical"
+                          margin={{ left: 10, right: 40 }}
+                      >
+                          <CartesianGrid horizontal={false} />
+                          <YAxis
+                              dataKey="name"
+                              type="category"
+                              tickLine={false}
+                              tickMargin={10}
+                              axisLine={false}
+                              tickFormatter={(value) => value}
+                              className="text-xs"
+                          />
+                          <XAxis dataKey="amount" type="number" hide />
+                          <ChartTooltip
+                              cursor={false}
+                              content={<ChartTooltipContent indicator="line" />}
+                          />
+                          <Bar
+                              dataKey="amount"
+                              layout="vertical"
+                              radius={4}
+                          >
+                            {categoryBarChartData.map((entry, index) => (
+                                <LabelList
+                                    key={`label-${index}`}
+                                    dataKey="amount"
+                                    position="right"
+                                    offset={8}
+                                    className="fill-foreground text-xs"
+                                    formatter={(value: number) => formatCurrency(value)}
+                                />
+                            ))}
+                          </Bar>
+                      </BarChart>
                   </ChartContainer>
                 ) : (
                     <div className="text-center text-muted-foreground py-8 flex flex-col items-center">
