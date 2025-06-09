@@ -16,6 +16,8 @@ import {
   ChevronRight,
   BarChartBig,
   ListChecks,
+  PiggyBank,
+  Landmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -56,7 +58,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import BudgetForm from './BudgetForm';
 import { MonthYearPicker } from './MonthYearPicker';
 
 interface BudgetsClientPageProps {
@@ -100,10 +101,9 @@ interface CategoryBudgetRowProps {
   onSave: (categoryId: string, amount: number) => Promise<void>;
   onDelete: (budget: WebAppBudget) => void;
   isSaving: boolean;
-  onEdit: (budget: WebAppBudget) => void;
 }
 
-function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving, onEdit }: CategoryBudgetRowProps) {
+function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: CategoryBudgetRowProps) {
   const [amountInput, setAmountInput] = useState<string>(budget?.amount?.toString() || '');
   const [inputError, setInputError] = useState<string | null>(null);
 
@@ -172,10 +172,6 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving, onEdi
       </div>
       {budget && (
         <div className="flex items-center gap-1 self-start sm:self-center">
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => onEdit(budget)} disabled={isSaving}>
-                <Settings2 className="h-4 w-4" />
-                <span className="sr-only">Edit Budget Details</span>
-            </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(budget)} disabled={isSaving}>
                 <Trash2 className="h-4 w-4" />
                 <span className="sr-only">Delete Budget</span>
@@ -201,8 +197,6 @@ export default function BudgetsClientPage({
   const [budgetToDelete, setBudgetToDelete] = useState<WebAppBudget | null>(null);
   const [isSavingCategoryBudget, setIsSavingCategoryBudget] = useState<string | null>(null);
   const [isLoadingPageData, setIsLoadingPageData] = useState(false);
-  const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
-  const [editingBudget, setEditingBudget] = useState<WebAppBudget | null>(null);
   
   const isInitialMount = useRef(true);
 
@@ -316,7 +310,7 @@ export default function BudgetsClientPage({
   }, []);
 
   const overallBudgetChartConfig = {
-    budgeted: { label: 'Budgeted', color: 'hsl(var(--chart-2))' }, // Green color
+    budgeted: { label: 'Budgeted', color: 'hsl(var(--chart-1))' },
     notSet: { label: 'Not Set', color: 'hsl(var(--muted))' }
   } satisfies ChartConfig;
   
@@ -411,20 +405,6 @@ export default function BudgetsClientPage({
       setIsSavingCategoryBudget(null);
     }
   };
-  
-  const handleEditBudget = (budget: WebAppBudget) => {
-    setEditingBudget(budget);
-    setIsBudgetFormOpen(true);
-  };
-
-  const handleBudgetFormSaveSuccess = (savedBudget: WebAppBudget) => {
-    setCategoryBudgets(prev => {
-      const updated = editingBudget ? prev.map(b => b.id === savedBudget.id ? savedBudget : b) : [...prev, savedBudget];
-      return updated.sort((a, b) => (budgetableCategories.find(c => c.id === a.categoryId)?.name || '').localeCompare(budgetableCategories.find(c => c.id === b.categoryId)?.name || ''));
-    });
-    setEditingBudget(null);
-    setIsBudgetFormOpen(false);
-  };
 
   const totalCategoryBudgetedAmount = useMemo(() => {
     return categoryBudgets.reduce((sum, budget) => sum + budget.amount, 0);
@@ -470,55 +450,66 @@ export default function BudgetsClientPage({
         </div>
 
         {/* ROW 1: Overall Budget Card & Radial Chart */}
-        <Card className="shadow-lg">
-          <div className="grid grid-cols-1 md:grid-cols-2">
-            <div className="pt-0 pl-8 pr-6 p-6 border-b md:border-b-0 md:border-r border-border flex flex-col">
-              <CardHeader className="p-0 mb-4 items-start">
-                <CardTitle className="text-xl">Overall Monthly Budget</CardTitle>
-                <CardDescription>Your total spending limit for the month.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0 flex-grow flex flex-col justify-center">
-                <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-4">
-                  <Controller
-                    name="amount"
-                    control={overallControl}
-                    render={({ field }) => (
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
-                        <Input
-                          id="overallAmount"
-                          type="text"
-                          inputMode="decimal"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          value={field.value === undefined ? '' : String(field.value)}
-                          placeholder="Enter total budget amount"
-                          className={cn("pl-10 h-12 text-xl font-semibold", overallErrors.amount && "border-destructive")}
-                          disabled={isSubmittingOverall || isLoadingPageData}
-                        />
-                      </div>
-                    )}
-                  />
-                  {overallErrors.amount && <p className="text-sm text-destructive mt-1">{overallErrors.amount.message}</p>}
-                  
-                  <Button type="submit" size="lg" className="w-full h-11" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
-                    {isSubmittingOverall ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                    {overallBudget ? 'Update Budget' : 'Set Budget'}
-                  </Button>
-                </form>
-              </CardContent>
+        <Card className="shadow-lg overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2">
+            <div className="p-6 md:p-8 flex flex-col">
+                <CardHeader className="p-0 mb-4 justify-left">
+                    <div className="flex items-center gap-3 mb-1">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <Landmark className="w-5 h-5 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl font-bold">Overall Monthly Budget</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Your total spending limit for the month.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0 flex-grow flex flex-col justify-center">
+                  <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-4">
+                    <Controller
+                      name="amount"
+                      control={overallControl}
+                      render={({ field }) => (
+                        <div className="relative">
+                          <DollarSign className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
+                          <Input
+                            id="overallAmount"
+                            type="text"
+                            inputMode="decimal"
+                            step="0.01"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            value={field.value === undefined ? '' : String(field.value)}
+                            placeholder="Enter total budget"
+                            className={cn(
+                                "pl-11 h-12 text-lg font-semibold tracking-wider",
+                                overallErrors.amount && "border-destructive focus-visible:ring-destructive/50"
+                            )}
+                            disabled={isSubmittingOverall || isLoadingPageData}
+                          />
+                        </div>
+                      )}
+                    />
+                    {overallErrors.amount && <p className="text-sm text-destructive mt-1.5">{overallErrors.amount.message}</p>}
+                    
+                    <Button type="submit" size="lg" className="w-full h-11 text-base" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
+                      {isSubmittingOverall ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                      {overallBudget ? 'Update Budget' : 'Set Budget'}
+                    </Button>
+                  </form>
+                </CardContent>
             </div>
-            <div className="flex flex-col items-center justify-center p-8 lg:p-12 bg-muted/30 md:rounded-r-lg min-h-[280px]">
+            
+            <div className="bg-muted/30 flex flex-col items-center justify-center p-6 lg:p-10 min-h-[320px] lg:min-h-full">
                 <ChartContainer
                     config={overallBudgetChartConfig}
-                    className="mx-auto aspect-square h-[220px]"
+                    className="mx-auto aspect-square w-full max-w-[250px]"
                 >
                     <RadialBarChart
                         data={overallBudgetChartData}
                         startAngle={-90}
-                        endAngle={overallBudget ? 270 : -90} // Animate from -90 to 270 if set
-                        innerRadius="80%"
+                        endAngle={overallBudget ? 270 : -90}
+                        innerRadius="82%"
                         outerRadius="100%"
                     >
                         <PolarGrid
@@ -530,9 +521,9 @@ export default function BudgetsClientPage({
                         <RadialBar
                             dataKey="value"
                             background
-                            cornerRadius={5}
+                            cornerRadius={8}
                             className={cn(
-                                "fill-green-500",
+                                "fill-primary",
                                 !overallBudget && "fill-muted"
                             )}
                         />
@@ -540,25 +531,33 @@ export default function BudgetsClientPage({
                             <Label
                                 content={({ viewBox }) => {
                                     if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                                        return (
-                                          <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                                      const cx = viewBox.cx as number;
+                                      const cy = viewBox.cy as number;
+                                      return (
+                                          <g>
                                               {overallBudget ? (
-                                                  <>
-                                                      <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
+                                                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" className="font-sans">
+                                                      <tspan x={cx} y={cy} className="fill-foreground text-3xl font-bold tracking-tight">
                                                           {formatCurrency(overallBudget.amount)}
                                                       </tspan>
-                                                      <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 22} className="fill-muted-foreground text-sm">
+                                                      <tspan x={cx} y={cy + 24} className="fill-muted-foreground text-sm">
                                                           Budget Set
                                                       </tspan>
-                                                  </>
+                                                  </text>
                                               ) : (
-                                                  <tspan x={viewBox.cx} y={viewBox.cy} className="fill-muted-foreground text-center font-medium">
-                                                      BUDGET
-                                                      <tspan x={viewBox.cx} dy="1.2em">TO BE SET</tspan>
-                                                  </tspan>
+                                                  <>
+                                                      <foreignObject x={cx - 20} y={cy - 28} width="40" height="40">
+                                                          <div className="flex items-center justify-center w-full h-full">
+                                                          <PiggyBank className="w-8 h-8 text-muted-foreground/30" />
+                                                          </div>
+                                                      </foreignObject>
+                                                       <text x={cx} y={cy + 20} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-base font-medium">
+                                                          Not Set
+                                                       </text>
+                                                  </>
                                               )}
-                                          </text>
-                                        )
+                                          </g>
+                                      )
                                     }
                                 }}
                             />
@@ -569,11 +568,9 @@ export default function BudgetsClientPage({
           </div>
         </Card>
 
-        <div className="pt-4" />
-
         <Card className="shadow-lg">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,_3fr)_minmax(0,_2fr)]">
-              <div className="pt-0 pl-8 pr-6 pb-6 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
+              <div className="pt-2 pl-8 pr-6 pb-6 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
                 <CardHeader className="p-0 mb-4">
                   <CardTitle className="text-lg font-semibold flex items-center gap-2">
                      <ListChecks className="h-5 w-5 text-primary" /> Allocated by Category
@@ -598,7 +595,6 @@ export default function BudgetsClientPage({
                             onSave={handleSaveCategoryBudget}
                             onDelete={setBudgetToDelete}
                             isSaving={isSavingCategoryBudget === category.id}
-                            onEdit={handleEditBudget}
                           />
                         ))}
                       </div>
@@ -668,15 +664,6 @@ export default function BudgetsClientPage({
               </CardFooter>
           </Card>
       </div>
-
-      <BudgetForm
-        isOpen={isBudgetFormOpen}
-        onOpenChange={setIsBudgetFormOpen}
-        budgetToEdit={editingBudget}
-        onSaveSuccess={handleBudgetFormSaveSuccess}
-        budgetableCategories={budgetableCategories}
-        currentPeriod={period}
-      />
 
       {budgetToDelete && (
         <Dialog open={!!budgetToDelete} onOpenChange={() => setBudgetToDelete(null)}>
