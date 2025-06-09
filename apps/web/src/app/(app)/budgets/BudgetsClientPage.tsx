@@ -1,7 +1,7 @@
 // apps/web/src/app/(app)/budgets/BudgetsClientPage.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DollarSign,
   Trash2,
@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   BarChartBig,
-  ListChecks,
+  ListChecks
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -195,6 +195,8 @@ export default function BudgetsClientPage({
   const [isLoadingPageData, setIsLoadingPageData] = useState(false);
   const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<WebAppBudget | null>(null);
+  
+  const isInitialMount = useRef(true);
 
   const {
     control: overallControl,
@@ -210,7 +212,7 @@ export default function BudgetsClientPage({
 
   const fetchBudgetDataForPeriod = useCallback(async (year: number, month: number) => {
     setIsLoadingPageData(true);
-    const toastId = toast.loading(`Loading data for ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}...`);
+    // Removed toast.loading here
 
     try {
         const [overallRes, categoryRes] = await Promise.all([
@@ -220,8 +222,6 @@ export default function BudgetsClientPage({
 
         const overallResult = await overallRes.json();
         const categoryResult = await categoryRes.json();
-
-        toast.dismiss(toastId);
         
         if (!overallRes.ok && overallRes.status !== 404) throw new Error(overallResult.error || 'Failed to fetch overall budget');
         if (!categoryRes.ok) throw new Error(categoryResult.error || 'Failed to fetch category budgets');
@@ -235,17 +235,19 @@ export default function BudgetsClientPage({
         setCategoryBudgets((categoryResult.data as WebAppBudget[] || []).sort((a, b) => a.name.localeCompare(b.name)));
         
     } catch (error) {
-        toast.error((error as Error).message, { id: toastId });
+        toast.error((error as Error).message);
     } finally {
         setIsLoadingPageData(false);
     }
   }, [resetOverallForm]);
 
   useEffect(() => {
-      if (period.year !== initialYear || period.month !== initialMonth) {
-          fetchBudgetDataForPeriod(period.year, period.month);
-      }
-  }, [period, initialYear, initialMonth, fetchBudgetDataForPeriod]);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    fetchBudgetDataForPeriod(period.year, period.month);
+  }, [period, fetchBudgetDataForPeriod]);
 
   useEffect(() => {
     setOverallBudget(initialOverallBudget);
@@ -344,10 +346,9 @@ export default function BudgetsClientPage({
 
     const toastId = toast.loading(`${existingBudget ? 'Updating' : 'Creating'} budget for ${category.name}...`);
     
-    // Create new budget from scratch
     const newBudgetName = `${category.name} Budget - ${selectedPeriodDisplay}`;
     const payload: WebAppCreateBudgetPayload | WebAppUpdateBudgetPayload = existingBudget 
-        ? { amount } // Only update amount from this inline form
+        ? { amount } 
         : {
             name: newBudgetName,
             categoryId: categoryId,
