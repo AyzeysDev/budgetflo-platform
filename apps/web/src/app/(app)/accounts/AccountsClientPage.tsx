@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, WalletCards } from 'lucide-react';
+import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, WalletCards, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -248,13 +248,13 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                             <div className="flex items-center justify-center gap-1 text-sm font-medium">
                                 {netWorth > 0 ? (
                                     <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                        <ArrowUpRight className="h-4 w-4" />
-                                        <span>Trending up</span>
+                                        <TrendingUp className="h-4 w-4" />
+                                        <span>Assets are up!</span>
                                     </span>
                                 ) : (
                                     <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                        <ArrowDownRight className="h-4 w-4" />
-                                        <span>Trending down</span>
+                                        <TrendingDown className="h-4 w-4" />
+                                        <span>Liablities are up!</span>
                                     </span>
                                 )}
                             </div>
