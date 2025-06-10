@@ -306,7 +306,7 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                         <CardDescription className="mt-1">Add a checking, savings, or investment account to get started.</CardDescription>
                     </Card>
                 ) : (
-                    <Accordion type="multiple" defaultValue={assetTypeOrder.filter(type => groupedAssets[type])} className="w-full">
+                    <Accordion type="multiple" className="w-full">
                         {assetTypeOrder.map(type => {
                             const accountsForType = groupedAssets[type];
                             if (!accountsForType || accountsForType.length === 0) return null;
@@ -370,7 +370,7 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                         <CardDescription className="mt-1">Add a credit card, loan, or other liability to see the full picture.</CardDescription>
                     </Card>
                 ) : (
-                    <Accordion type="multiple" defaultValue={liabilityTypeOrder.filter(type => groupedLiabilities[type])} className="w-full">
+                    <Accordion type="multiple" className="w-full">
                         {liabilityTypeOrder.map(type => {
                             const accountsForType = groupedLiabilities[type];
                             if (!accountsForType || accountsForType.length === 0) return null;

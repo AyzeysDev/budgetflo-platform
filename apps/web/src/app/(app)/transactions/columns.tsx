@@ -18,6 +18,7 @@ import { WebAppCategory } from "@/types/budget";
 import { WebAppAccount } from "@/types/account";
 import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
 import { cn } from "@/lib/utils";
+import React, { useState, useEffect } from 'react';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -31,6 +32,36 @@ export type TransactionWithDetails = WebAppTransaction & {
   category?: WebAppCategory | null;
   account?: WebAppAccount | null;
 };
+
+/**
+ * A Client Component to safely format dates on the client side
+ * to prevent hydration mismatch errors.
+ * @param {object} props - The component props.
+ * @param {string | Date} props.date - The date to format.
+ */
+const FormattedDateCell = ({ date }: { date: string | Date }) => {
+    const [formattedDate, setFormattedDate] = useState<string>('');
+
+    useEffect(() => {
+        // This effect runs only on the client, after hydration.
+        // It safely formats the date according to the user's locale.
+        setFormattedDate(new Date(date).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        }));
+    }, [date]);
+
+    // Render a placeholder or nothing on the server and initial client render
+    // to ensure the server and client output match initially.
+    if (!formattedDate) {
+        // You can return a placeholder skeleton here if you want
+        return <div className="text-left w-24 h-5" />;
+    }
+
+    return <div className="text-left">{formattedDate}</div>;
+};
+
 
 export const columns = (
   onEdit: (transaction: TransactionWithDetails) => void,
@@ -50,8 +81,9 @@ export const columns = (
       );
     },
     cell: ({ row }) => {
-      const date = new Date(row.getValue("date"));
-      return <div className="text-left">{date.toLocaleDateString()}</div>;
+      const dateValue = row.getValue("date") as string;
+      // Use the client-side safe date formatter component
+      return <FormattedDateCell date={dateValue} />;
     },
   },
   {

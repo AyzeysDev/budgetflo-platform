@@ -1,4 +1,3 @@
-// apps/web/src/app/api/transactions/[transactionId]/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import { WebAppUpdateTransactionPayload } from '@/types/transaction';
@@ -16,9 +15,34 @@ async function getAuthenticatedUserId(req: NextRequest): Promise<string | null> 
 }
 
 interface Context {
-  params: {
+  params: Promise<{
     transactionId: string;
-  };
+  }>;
+}
+
+// GET a specific transaction
+export async function GET(req: NextRequest, { params }: Context) {
+  if (!expressApiUrl) return NextResponse.json({ error: "API endpoint not configured." }, { status: 503 });
+
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const { transactionId } = await params;
+  if (!transactionId) return NextResponse.json({ error: "Transaction ID is required." }, { status: 400 });
+
+  try {
+    const targetUrl = `${expressApiUrl}/users/${userId}/transactions/${transactionId}`;
+    const response = await fetch(targetUrl, {
+      headers: {
+        'X-Authenticated-User-Id': userId,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) return NextResponse.json({ error: data.error || 'Failed to fetch transaction.' }, { status: response.status });
+    return NextResponse.json(data, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: 'Internal Server Error.' }, { status: 500 });
+  }
 }
 
 // PUT to update a specific transaction
@@ -28,15 +52,15 @@ export async function PUT(req: NextRequest, { params }: Context) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  const { transactionId } = params;
-  if (!transactionId) return NextResponse.json({ error: "Transaction ID is required." }, { status: 400 });
-
   let payload: WebAppUpdateTransactionPayload;
   try {
     payload = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
+
+  const { transactionId } = await params;
+  if (!transactionId) return NextResponse.json({ error: "Transaction ID is required." }, { status: 400 });
   
   try {
     const targetUrl = `${expressApiUrl}/users/${userId}/transactions/${transactionId}`;
@@ -63,7 +87,9 @@ export async function DELETE(req: NextRequest, { params }: Context) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   
-  const { transactionId } = params;
+  await req.text(); // Consume the body to avoid memory leaks
+
+  const { transactionId } = await params;
   if (!transactionId) return NextResponse.json({ error: "Transaction ID is required." }, { status: 400 });
 
   try {
