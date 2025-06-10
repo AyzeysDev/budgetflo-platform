@@ -191,7 +191,79 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                 <CardTitle>Net Worth Overview</CardTitle>
                 <CardDescription>A snapshot of your financial health.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+                <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="h-[180px] w-full">
+                        {netWorthChartData.length > 0 ? (
+                            <ChartContainer config={chartConfig} className="mx-auto aspect-square h-full">
+                                <PieChart>
+                                    <Tooltip
+                                        cursor={false}
+                                        content={<ChartTooltipContent hideLabel />}
+                                    />
+                                    <Pie
+                                        data={netWorthChartData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={60}
+                                        outerRadius={90}
+                                        cornerRadius={8}
+                                        paddingAngle={5}
+                                        strokeWidth={2}
+                                        labelLine={{ stroke: "hsl(var(--muted-foreground))" }}
+                                        label={({ cx, cy, midAngle, outerRadius, value }) => {
+                                            const RADIAN = Math.PI / 180;
+                                            const radius = outerRadius + 20;
+                                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                            return (
+                                                <text
+                                                    x={x}
+                                                    y={y}
+                                                    textAnchor={x > cx ? 'start' : 'end'}
+                                                    dominantBaseline="central"
+                                                    className="text-xs fill-foreground"
+                                                >
+                                                    {new Intl.NumberFormat('en-US', {
+                                                        style: 'decimal',
+                                                        notation: 'compact',
+                                                        compactDisplay: 'short'
+                                                    }).format(value)}
+                                                </text>
+                                            );
+                                        }}
+                                    />
+                                </PieChart>
+                            </ChartContainer>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8 h-full">
+                                <PieChartIcon className="h-12 w-12 mb-3 opacity-50" />
+                                <p className="font-semibold text-base">Net Worth Breakdown</p>
+                                <p className="text-xs max-w-xs">Add your first asset or liability account to visualize your financial standing.</p>
+                            </div>
+                        )}
+                    </div>
+                    {netWorthChartData.length > 0 && netWorth !== 0 && (
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-1 text-sm font-medium">
+                                {netWorth > 0 ? (
+                                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                        <ArrowUpRight className="h-4 w-4" />
+                                        <span>Trending up</span>
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                        <ArrowDownRight className="h-4 w-4" />
+                                        <span>Trending down</span>
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Based on current assets vs liabilities.
+                            </p>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3">
                      <div className="flex items-center p-3 rounded-lg bg-muted/50 border">
                         <div className="p-2.5 rounded-full bg-green-600/10 text-green-600 dark:text-green-400 mr-3">
@@ -220,34 +292,6 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                             <p className="text-xl font-bold text-primary">{formatCurrency(netWorth)}</p>
                         </div>
                     </div>
-                </div>
-                <div className="flex items-center justify-center min-h-[250px]">
-                    {netWorthChartData.length > 0 ? (
-                        <ChartContainer config={chartConfig} className="mx-auto aspect-square h-[250px]">
-                            <PieChart>
-                                <Tooltip
-                                    cursor={false}
-                                    content={<ChartTooltipContent hideLabel />}
-                                />
-                                <Pie
-                                    data={netWorthChartData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    innerRadius={80}
-                                    outerRadius={110}
-                                    cornerRadius={8}
-                                    paddingAngle={5}
-                                    strokeWidth={2}
-                                />
-                            </PieChart>
-                        </ChartContainer>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8">
-                            <PieChartIcon className="h-12 w-12 mb-3 opacity-50" />
-                            <p className="font-semibold text-base">Net Worth Breakdown</p>
-                            <p className="text-xs max-w-xs">Add your first asset or liability account to visualize your financial standing.</p>
-                        </div>
-                    )}
                 </div>
             </CardContent>
         </Card>
