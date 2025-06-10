@@ -5,7 +5,8 @@ import cors from 'cors';
 import userRoutes from './routes/userRoutes';
 import categoryRoutes from './routes/categoryRoutes'; 
 import budgetRoutes from './routes/budgetRoutes'; 
-import accountRoutes from './routes/accountRoutes'; // Import account routes
+import accountRoutes from './routes/accountRoutes';
+import transactionRoutes from './routes/transactionRoutes'; // Import transaction routes
 import { firebaseInitialized } from './config/firebase';
 
 dotenv.config();
@@ -54,7 +55,8 @@ function authenticateUserForScopedResources(req: Request, res: Response, next: N
 const userScopedRouter = express.Router({ mergeParams: true });
 userScopedRouter.use('/categories', categoryRoutes);
 userScopedRouter.use('/budgets', budgetRoutes);
-userScopedRouter.use('/accounts', accountRoutes); // Add account routes to the scoped router
+userScopedRouter.use('/accounts', accountRoutes);
+userScopedRouter.use('/transactions', transactionRoutes); // Add transaction routes
 
 app.use('/api/users/:userId', authenticateUserForScopedResources, userScopedRouter);
 
