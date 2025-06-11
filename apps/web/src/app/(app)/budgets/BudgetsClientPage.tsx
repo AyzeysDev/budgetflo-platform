@@ -17,7 +17,9 @@ import {
   BarChartBig,
   ListChecks,
   PiggyBank,
-  Landmark,
+  TrendingUp,
+  TrendingDown,
+  Repeat,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -43,14 +45,13 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Label,
   LabelList,
-  PolarGrid,
-  PolarRadiusAxis,
+  PolarAngleAxis,
   RadialBar,
   RadialBarChart,
   XAxis,
   YAxis,
+  Cell,
 } from 'recharts';
 import {
   ChartContainer,
@@ -59,6 +60,8 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { MonthYearPicker } from './MonthYearPicker';
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface BudgetsClientPageProps {
   initialOverallBudget: WebAppBudget | null;
@@ -197,6 +200,8 @@ export default function BudgetsClientPage({
   const [budgetToDelete, setBudgetToDelete] = useState<WebAppBudget | null>(null);
   const [isSavingCategoryBudget, setIsSavingCategoryBudget] = useState<string | null>(null);
   const [isLoadingPageData, setIsLoadingPageData] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [isCategoryRecurring, setIsCategoryRecurring] = useState(false);
   
   const isInitialMount = useRef(true);
 
@@ -306,13 +311,26 @@ export default function BudgetsClientPage({
   };
   
   const overallBudgetChartData = useMemo(() => {
-    return [{ value: 100 }];
-  }, []);
+    if (!overallBudget) return [];
+    const spent = overallBudget.spentAmount;
+    const total = overallBudget.amount;
+    const overspent = Math.max(0, spent - total);
+    const spentCapped = Math.min(spent, total);
+    const remaining = Math.max(0, total - spent);
+
+    return [
+      { name: 'spent', value: spentCapped, fill: 'var(--color-chart-yellow)' },
+      { name: 'overspent', value: overspent, fill: 'var(--color-destructive)' },
+      { name: 'remaining', value: remaining, fill: 'var(--color-chart-green)' },
+    ];
+  }, [overallBudget]);
 
   const overallBudgetChartConfig = {
-    budgeted: { label: 'Budgeted', color: 'hsl(var(--chart-1))' },
-    notSet: { label: 'Not Set', color: 'hsl(var(--muted))' }
+    spent: { label: 'Spent', color: 'hsl(var(--chart-yellow))' },
+    overspent: { label: 'Overspent', color: 'hsl(var(--destructive))' },
+    remaining: { label: 'Remaining', color: 'hsl(var(--chart-green))' },
   } satisfies ChartConfig;
+
   
   const categoryBarChartData = useMemo(() => {
     return budgetableCategories.map(category => {
@@ -425,6 +443,10 @@ export default function BudgetsClientPage({
   }, [overallBudget, totalCategoryBudgetedAmount, categoryBudgets.length]);
 
 
+  const remainingAmount = overallBudget ? overallBudget.amount - overallBudget.spentAmount : 0;
+  const isOverspent = overallBudget ? overallBudget.spentAmount > overallBudget.amount : false;
+  const totalDisplayForChart = overallBudget ? (isOverspent ? overallBudget.spentAmount : overallBudget.amount) : 100;
+
   return (
     <>
       <div className="flex flex-col gap-6 md:gap-8">
@@ -450,13 +472,13 @@ export default function BudgetsClientPage({
         </div>
 
         {/* ROW 1: Overall Budget Card & Radial Chart */}
-        <Card className="shadow-lg overflow-hidden">
+        <Card className="shadow-lg overflow-hidden py-0">
           <div className="grid grid-cols-1 lg:grid-cols-2">
-            <div className="p-6 md:p-8 flex flex-col">
+            <div className="p-6 flex flex-col">
                 <CardHeader className="p-0 mb-4 justify-left">
                     <div className="flex items-center gap-3 mb-1">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <Landmark className="w-5 h-5 text-primary" />
+                            <PiggyBank className="w-5 h-5 text-primary" />
                         </div>
                         <CardTitle className="text-xl font-bold">Overall Monthly Budget</CardTitle>
                     </div>
@@ -464,118 +486,121 @@ export default function BudgetsClientPage({
                         Your total spending limit for the month.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="p-0 flex-grow flex flex-col justify-center">
-                  <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-4">
-                    <Controller
-                      name="amount"
-                      control={overallControl}
-                      render={({ field }) => (
-                        <div className="relative">
-                          <DollarSign className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
-                          <Input
-                            id="overallAmount"
-                            type="text"
-                            inputMode="decimal"
-                            step="0.01"
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            value={field.value === undefined ? '' : String(field.value)}
-                            placeholder="Enter total budget"
-                            className={cn(
-                                "pl-11 h-12 text-lg font-semibold tracking-wider",
-                                overallErrors.amount && "border-destructive focus-visible:ring-destructive/50"
-                            )}
-                            disabled={isSubmittingOverall || isLoadingPageData}
+                <CardContent className="p-0 pt-4">
+                  <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="flex items-start gap-2">
+                      <div className="flex-grow space-y-1.5">
+                          <Controller
+                              name="amount"
+                              control={overallControl}
+                              render={({ field }) => (
+                                  <div className="relative">
+                                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                      <Input
+                                          id="overallAmount"
+                                          type="text"
+                                          inputMode="decimal"
+                                          placeholder="Enter monthly budget"
+                                          {...field}
+                                          onChange={(e) => field.onChange(e.target.value)}
+                                          value={field.value === undefined ? '' : String(field.value)}
+                                          className={cn("pl-9 h-11 text-base", overallErrors.amount && "border-destructive focus-visible:ring-destructive/50")}
+                                          disabled={isSubmittingOverall || isLoadingPageData}
+                                      />
+                                  </div>
+                              )}
                           />
-                        </div>
-                      )}
-                    />
-                    {overallErrors.amount && <p className="text-sm text-destructive mt-1.5">{overallErrors.amount.message}</p>}
-                    
-                    <Button type="submit" size="lg" className="w-full h-11 text-base" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
-                      {isSubmittingOverall ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                      {overallBudget ? 'Update Budget' : 'Set Budget'}
-                    </Button>
+                          {overallErrors.amount && <p className="text-xs text-destructive px-1">{overallErrors.amount.message}</p>}
+                      </div>
+                      <Button type="submit" className="h-11 shrink-0" disabled={isSubmittingOverall || !isOverallDirty || isLoadingPageData}>
+                          {isSubmittingOverall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                          {overallBudget ? 'Update' : 'Set'}
+                      </Button>
                   </form>
+                  <div className="mt-6 pt-8 border-t">
+                      <div className="flex items-center justify-between">
+                          <Label htmlFor="recurring-budget" className="flex items-center gap-2 cursor-pointer">
+                              <Repeat className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">Set Recurring</span>
+                          </Label>
+                          <Switch
+                              id="recurring-budget"
+                              checked={isRecurring}
+                              onCheckedChange={setIsRecurring}
+                          />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                          This budget will apply to future months, adapting based on usage.
+                      </p>
+                  </div>
                 </CardContent>
             </div>
             
-            <div className="bg-muted/30 flex flex-col items-center justify-center p-6 lg:p-10 min-h-[320px] lg:min-h-full">
-                <ChartContainer
-                    config={overallBudgetChartConfig}
-                    className="mx-auto aspect-square w-full max-w-[250px]"
+            <div className="bg-muted/30 flex flex-col items-center justify-center p-6 lg:p-6">
+              <ChartContainer
+                config={overallBudgetChartConfig}
+                className="mx-auto aspect-square w-full max-w-[210px]"
+              >
+                <RadialBarChart
+                  data={overallBudgetChartData}
+                  startAngle={90}
+                  endAngle={-270}
+                  innerRadius="75%"
+                  outerRadius="100%"
+                  barSize={20}
+                  stackOffset="expand"
                 >
-                    <RadialBarChart
-                        data={overallBudgetChartData}
-                        startAngle={-90}
-                        endAngle={overallBudget ? 270 : -90}
-                        innerRadius="82%"
-                        outerRadius="100%"
-                    >
-                        <PolarGrid
-                            gridType="circle"
-                            radialLines={false}
-                            stroke="none"
-                            className="first:fill-muted last:fill-background"
-                        />
-                        <RadialBar
-                            dataKey="value"
-                            background
-                            cornerRadius={8}
-                            className={cn(
-                                "fill-primary",
-                                !overallBudget && "fill-muted"
-                            )}
-                        />
-                        <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
-                            <Label
-                                content={({ viewBox }) => {
-                                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                                      const cx = viewBox.cx as number;
-                                      const cy = viewBox.cy as number;
-                                      return (
-                                          <g>
-                                              {overallBudget ? (
-                                                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" className="font-sans">
-                                                      <tspan x={cx} y={cy} className="fill-foreground text-3xl font-bold tracking-tight">
-                                                          {formatCurrency(overallBudget.amount)}
-                                                      </tspan>
-                                                      <tspan x={cx} y={cy + 24} className="fill-muted-foreground text-sm">
-                                                          Budget Set
-                                                      </tspan>
-                                                  </text>
-                                              ) : (
-                                                  <>
-                                                      <foreignObject x={cx - 20} y={cy - 28} width="40" height="40">
-                                                          <div className="flex items-center justify-center w-full h-full">
-                                                          <PiggyBank className="w-8 h-8 text-muted-foreground/30" />
-                                                          </div>
-                                                      </foreignObject>
-                                                       <text x={cx} y={cy + 20} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-base font-medium">
-                                                          Not Set
-                                                       </text>
-                                                  </>
-                                              )}
-                                          </g>
-                                      )
-                                    }
-                                }}
-                            />
-                        </PolarRadiusAxis>
-                    </RadialBarChart>
-                </ChartContainer>
+                  <PolarAngleAxis type="number" domain={[0, totalDisplayForChart]} tick={false} />
+                  <RadialBar dataKey="value" cornerRadius={8} background={{ fill: 'hsl(var(--muted))' }}>
+                    {overallBudgetChartData.map((entry) => (
+                      <Cell key={`cell-${entry.name}`} fill={entry.fill} />
+                    ))}
+                  </RadialBar>
+                  <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-foreground text-center">
+                      <tspan x="50%" dy="-0.6em" className="text-lg font-bold">{formatCurrency(overallBudget?.spentAmount)}</tspan>
+                      <tspan x="50%" dy="1.2em" className="text-sm text-muted-foreground">Spent of {formatCurrency(overallBudget?.amount)}</tspan>
+                  </text>
+                </RadialBarChart>
+              </ChartContainer>
+              {overallBudget && (
+                <div className="text-center mt-4">
+                  {isOverspent ? (
+                    <div className="flex items-center justify-center gap-1 text-sm font-medium text-destructive">
+                      <TrendingDown className="h-4 w-4" />
+                      <span>Overspent by {formatCurrency(Math.abs(remainingAmount))}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-1 text-sm font-medium text-green-600 dark:text-green-400">
+                      <TrendingUp className="h-4 w-4" />
+                      <span>{formatCurrency(remainingAmount)} remaining</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Youve used {((overallBudget.spentAmount / overallBudget.amount) * 100).toFixed(0)}% of your budget.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </Card>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-lg py-4">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,_3fr)_minmax(0,_2fr)]">
               <div className="pt-2 pl-8 pr-6 pb-6 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
                 <CardHeader className="p-0 mb-4">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                     <ListChecks className="h-5 w-5 text-primary" /> Allocated by Category
-                  </CardTitle>
-                   <CardDescription>Set individual limits for expense categories included in your budget.</CardDescription>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <ListChecks className="h-5 w-5 text-primary" /> Allocated by Category
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="category-recurring" className="text-sm font-medium text-muted-foreground">Recurring</Label>
+                            <Switch
+                                id="category-recurring"
+                                checked={isCategoryRecurring}
+                                onCheckedChange={setIsCategoryRecurring}
+                            />
+                        </div>
+                    </div>
+                   <CardDescription className="mt-1">Set individual limits for expense categories included in your budget.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0 flex-1">
                   {budgetableCategories.length === 0 ? (

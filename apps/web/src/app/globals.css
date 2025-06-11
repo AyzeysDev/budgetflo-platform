@@ -2,7 +2,7 @@
 @import "tailwindcss";
 /* @import "tw-animate-css"; /* Uncomment if you install and want to use tw-animate-css */
 
-/* Define CSS variables for light mode (default) - REMAINS UNCHANGED */
+/* Define CSS variables for light mode (default) */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.13 0.028 261.692);
@@ -40,19 +40,21 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --chart-1: hsl(48 96% 53%); /* Yellow */
+  --chart-2: hsl(142 71% 45%); /* Green */
+  --chart-3: hsl(221 83% 53%); /* Blue */
+  --chart-4: hsl(347 77% 50%); /* Red */
+  --chart-5: hsl(262 82% 56%); /* Violet */
+  --chart-green: hsl(142 71% 45%);
+  --chart-yellow: hsl(48 96% 53%);
+  --chart-red: hsl(347 77% 50%);
 }
 
-/* Define CSS variables for dark mode - UPDATED */
+/* Define CSS variables for dark mode */
 .dark {
   --background: oklch(0.31 0.021 168); /* New dark background from image */
   --foreground: oklch(0.95 0.005 168); /* Light text, slightly desaturated to match theme */
 
-  /* Primary color can remain green or be adjusted. Keeping current for now. */
   --primary: oklch(0.58 0.17 155.5); 
   --primary-foreground: oklch(0.15 0.02 155.5 / 95%); 
   
@@ -80,17 +82,18 @@
   --border: oklch(0.45 0.02 168 / 50%); /* Subtle border, slightly lighter than card */
   --input: oklch(0.40 0.022 167 / 70%); /* Input background, distinct from card */
   --ring: var(--primary); /* Ring color matching primary, can be adjusted if needed */
-
-  /* Dark mode chart colors - can be adjusted later to fit the new theme */
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --radar-axis-text-dark: oklch(0.8 0.01 168); /* Lighter text for radar axes */
+  
+  --chart-1: hsl(48 96% 53%);
+  --chart-2: hsl(142 71% 45%);
+  --chart-3: hsl(221 83% 53%);
+  --chart-4: hsl(347 77% 50%);
+  --chart-5: hsl(262 82% 56%);
+  --chart-green: hsl(142 71% 45%);
+  --chart-yellow: hsl(48 96% 53%);
+  --chart-red: hsl(347 77% 50%);
 }
 
-/* Tailwind v4 @theme block for aliasing CSS variables - REMAINS UNCHANGED */
+/* Tailwind v4 @theme block for aliasing CSS variables */
 @theme {
   --font-family-sans: var(--font-geist-sans);
   --font-family-mono: var(--font-geist-mono);
@@ -122,15 +125,17 @@
   --radius: var(--radius);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-radar-axis-text-dark: var(--radar-axis-text-dark);
+  --color-chart-green: var(--chart-green);
+  --color-chart-yellow: var(--chart-yellow);
+  --color-chart-red: var(--chart-red);
 }
 
 @layer base {

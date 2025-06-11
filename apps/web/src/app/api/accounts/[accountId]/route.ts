@@ -1,4 +1,3 @@
-// apps/web/src/app/api/accounts/[accountId]/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import type { WebAppUpdateAccountPayload } from '@/types/account';
@@ -16,9 +15,49 @@ async function getAuthenticatedUserId(req: NextRequest): Promise<string | null> 
 }
 
 interface Context {
-  params: {
+  params: Promise<{
     accountId: string;
-  };
+  }>;
+}
+
+// GET a specific account
+export async function GET(req: NextRequest, { params }: Context) {
+  if (!expressApiUrl) {
+    return NextResponse.json({ error: "API service endpoint is not configured." }, { status: 503 });
+  }
+
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { accountId } = await params;
+  if (!accountId) {
+    return NextResponse.json({ error: "Account ID is required." }, { status: 400 });
+  }
+
+  try {
+    const targetUrl = `${expressApiUrl}/users/${userId}/accounts/${accountId}`;
+    console.log(`[BFF GET /api/accounts/${accountId}] Forwarding to: ${targetUrl}`);
+
+    const response = await fetch(targetUrl, {
+      headers: {
+        'X-Authenticated-User-Id': userId,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error(`[BFF GET /api/accounts] Backend error. Status: ${response.status}, Body:`, data);
+      return NextResponse.json({ error: data.error || 'Failed to fetch account.' }, { status: response.status });
+    }
+
+    return NextResponse.json(data, { status: 200 });
+
+  } catch (error) {
+    console.error(`[BFF GET /api/accounts/${accountId}] Internal error:`, error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
 
 // PUT to update a specific account
@@ -32,7 +71,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { accountId } = params;
+  const { accountId } = await params;
   if (!accountId) {
     return NextResponse.json({ error: "Account ID is required." }, { status: 400 });
   }
@@ -59,7 +98,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
 
     const data = await response.json();
     if (!response.ok) {
-       console.error(`[BFF PUT /api/accounts] Backend error. Status: ${response.status}, Body:`, data);
+      console.error(`[BFF PUT /api/accounts] Backend error. Status: ${response.status}, Body:`, data);
       return NextResponse.json({ error: data.error || data.errors || 'Failed to update account.' }, { status: response.status });
     }
 
@@ -82,7 +121,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { accountId } = params;
+  const { accountId } = await params;
   if (!accountId) {
     return NextResponse.json({ error: "Account ID is required." }, { status: 400 });
   }
