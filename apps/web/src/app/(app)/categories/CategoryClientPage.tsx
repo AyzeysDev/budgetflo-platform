@@ -1,7 +1,8 @@
+// apps/web/src/app/(app)/categories/CategoryClientPage.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { PlusCircle, Tags, Edit3, Trash2, AlertTriangleIcon, Filter } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { PlusCircle, Tags, AlertTriangleIcon, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,9 +24,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { CategoryDTO } from '@/../../api/src/models/budget.model';
-import CategoryForm from './CategoryForm'; 
-import { IconRenderer, getContrastingTextColor, AvailableIconName } from './categoryUtils';
-import { cn } from '@/lib/utils';
+import CategoryForm from './CategoryForm';
+import { DataTable } from './data-table';
+import { columns } from './columns';
 
 interface CategoryClientPageProps {
   initialCategories: CategoryDTO[];
@@ -87,20 +88,23 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
     setEditingCategory(null);
   };
 
-  const filteredCategories = categories.filter(category => {
-    const matchesFilter = filterType === 'all' || category.type === filterType;
-    return matchesFilter;
-  });
+  const filteredCategories = useMemo(() => {
+    if (filterType === 'all') return categories;
+    return categories.filter(category => category.type === filterType);
+  }, [categories, filterType]);
 
-  const incomeCount = categories.filter(cat => cat.type === 'income').length;
-  const expenseCount = categories.filter(cat => cat.type === 'expense').length;
+  const tableColumns = useMemo(() => columns(handleEditCategory, setCategoryToDelete), []);
+
+  const incomeCount = useMemo(() => categories.filter(cat => cat.type === 'income').length, [categories]);
+  const expenseCount = useMemo(() => categories.filter(cat => cat.type === 'expense').length, [categories]);
 
   return (
     <>
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight flex items-center">
+             <Tags className="mr-3 h-8 w-8 text-primary" />
             Manage Categories
           </h1>
           <p className="text-md text-muted-foreground mt-1">
@@ -108,11 +112,11 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
           </p>
           <div className="flex items-center gap-3 mt-3">
             <Badge variant="secondary" className="text-xs">
-              <div className="w-2 h-2 rounded-full bg-green-500 mr-1" />
+              <div className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
               {incomeCount} Income
             </Badge>
             <Badge variant="secondary" className="text-xs">
-              <div className="w-2 h-2 rounded-full bg-red-500 mr-1" />
+              <div className="w-2 h-2 rounded-full bg-red-500 mr-1.5" />
               {expenseCount} Expense
             </Badge>
           </div>
@@ -124,190 +128,43 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
           </Button>
         </div>
       </div>
-
-      {/* Controls */}
-      <div className="flex justify-start items-center mb-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
-              <Filter className="mr-1 h-3 w-3" />
-              {filterType === 'all' ? 'All Types' : filterType === 'income' ? 'Income' : 'Expense'}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-36">
-            <DropdownMenuLabel className="text-xs">Filter by Type</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setFilterType('all')} className="text-xs">
-              All Categories
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFilterType('income')} className="text-xs">
-              Income Only
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFilterType('expense')} className="text-xs">
-              Expense Only
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Categories Display */}
+      
+      {/* Controls & Table Card */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Tags className="h-6 w-6 text-primary" />
-            Your Categories
-          </CardTitle>
-          <CardDescription>
-            {filteredCategories.length} {filteredCategories.length === 1 ? 'category' : 'categories'} found
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 pt-0">
-          {filteredCategories.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-muted flex items-center justify-center">
-                <Tags className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-medium mb-2 text-foreground">No categories found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {filterType !== 'all' ? 'Try adjusting your filter or ' : 'Get started by '} creating your first category.
-              </p>
-              <Button onClick={handleAddCategory}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add Category
-              </Button>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+                <CardTitle>Your Categories</CardTitle>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
+                        <Filter className="mr-1 h-3 w-3" />
+                        {filterType === 'all' ? 'All Types' : filterType === 'income' ? 'Income' : 'Expense'}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuLabel className="text-xs">Filter by Type</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setFilterType('all')} className="text-xs">
+                        All Categories
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setFilterType('income')} className="text-xs">
+                        Income Only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setFilterType('expense')} className="text-xs">
+                        Expense Only
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
-          )}
-
-          {filteredCategories.length > 0 && (
-            <div className="space-y-0">
-              {/* Table Header */}
-              <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-border bg-muted/50 rounded-t-lg">
-                <div className="col-span-1 text-xs font-medium text-muted-foreground text-center">
-                  Icon
-                </div>
-                <div className="col-span-3 text-xs font-medium text-muted-foreground text-center">
-                  Name
-                </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
-                  Type
-                </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
-                  Include in Budget?
-                </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
-                  Edit
-                </div>
-                <div className="col-span-2 text-xs font-medium text-muted-foreground text-center">
-                  Delete
-                </div>
-              </div>
-              
-              {/* Table Rows */}
-              {filteredCategories.map((category, index) => {
-                const textColor = category.color ? getContrastingTextColor(category.color) : 'inherit';
-                // Default to true if includeInBudget is undefined
-                const isIncludedInBudget = category.includeInBudget !== false;
-                
-                return (
-                  <div 
-                    key={category.id}
-                    className={cn(
-                      "grid grid-cols-12 gap-3 px-4 py-3 border-b border-border/50 hover:bg-muted/30 transition-colors duration-150",
-                      index === filteredCategories.length - 1 && "border-b-0 rounded-b-lg"
-                    )}
-                  >
-                    {/* Icon */}
-                    <div className="col-span-1 flex items-center justify-center">
-                      <div 
-                        className="w-7 h-7 rounded-md flex items-center justify-center shadow-sm"
-                        style={{ backgroundColor: category.color || '#6B7280' }}
-                      >
-                        <IconRenderer 
-                          name={category.icon as AvailableIconName | null} 
-                          className="w-4 h-4" 
-                          style={{ color: textColor }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Name */}
-                    <div className="col-span-3 flex items-center justify-center">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm text-foreground">{category.name}</span>
-                        {category.isSystemCategory && (
-                          <Badge variant="outline" className="text-xs w-fit mt-1">
-                            System Category
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Type */}
-                    <div className="col-span-2 flex items-center justify-center">
-                      <Badge 
-                        variant={category.type === 'income' ? 'default' : 'destructive'}
-                        className="text-xs"
-                      >
-                        {category.type}
-                      </Badge>
-                    </div>
-                    
-                    {/* Include in Budget - Read Only Display */}
-                    <div className="col-span-2 flex items-center justify-center">
-                      <div className="flex items-center space-x-2">
-                        <div 
-                          className={cn(
-                            "w-4 h-4 rounded border-2 flex items-center justify-center",
-                            isIncludedInBudget 
-                              ? "bg-primary border-primary" 
-                              : "border-muted-foreground"
-                          )}
-                        >
-                          {isIncludedInBudget && (
-                            <div className="w-2 h-2 bg-white rounded-sm" />
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {isIncludedInBudget ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Edit */}
-                    <div className="col-span-2 flex items-center justify-center">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleEditCategory(category)} 
-                        disabled={category.isSystemCategory}
-                        className="h-8 w-8 p-0 hover:bg-primary/10"
-                        title="Edit category"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    {/* Delete */}
-                    <div className="col-span-2 flex items-center justify-center">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => setCategoryToDelete(category)} 
-                        disabled={category.isSystemCategory}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        title="Delete category"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
+            <CardDescription>
+              A list of your income and expense categories for budget tracking.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+             <DataTable columns={tableColumns} data={filteredCategories} />
+          </CardContent>
       </Card>
-
+      
       {/* Category Form Modal */}
       <CategoryForm
         isOpen={isFormModalOpen}
