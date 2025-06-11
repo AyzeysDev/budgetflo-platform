@@ -22,7 +22,7 @@ import {
   Repeat,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -626,6 +626,19 @@ export default function BudgetsClientPage({
                     </ScrollArea>
                   )}
                 </CardContent>
+                <div
+                  className={cn(
+                    'mt-4 flex items-center justify-center gap-2 text-center text-sm font-medium',
+                    {
+                      'text-green-600 dark:text-green-500': budgetComparisonMessage.type === 'success',
+                      'text-sky-600 dark:text-sky-400': budgetComparisonMessage.type === 'info',
+                      'text-amber-600 dark:text-amber-500': budgetComparisonMessage.type === 'warning',
+                    },
+                  )}
+                >
+                  <budgetComparisonMessage.icon className="h-4 w-4 shrink-0" />
+                  <span>{budgetComparisonMessage.message}</span>
+                </div>
               </div>
 
               <div className="p-8 lg:p-12 bg-muted/20 md:rounded-r-lg flex flex-col items-center justify-center min-h-[350px] lg:min-h-full">
@@ -679,14 +692,6 @@ export default function BudgetsClientPage({
                 )}
               </div>
             </div>
-             <CardFooter className={cn("p-4 border-t text-sm flex items-center gap-2 justify-center",
-                 budgetComparisonMessage.type === 'success' && "text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20",
-                 budgetComparisonMessage.type === 'info' && "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20",
-                 budgetComparisonMessage.type === 'warning' && "text-yellow-800 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/20"
-              )}>
-                <budgetComparisonMessage.icon className="h-4 w-4 shrink-0" />
-                {budgetComparisonMessage.message}
-              </CardFooter>
           </Card>
       </div>
 
