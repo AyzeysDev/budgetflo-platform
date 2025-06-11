@@ -6,7 +6,6 @@ import {
   Menu,
   PiggyBank,
   LayoutDashboard,
-  Wallet,
   CreditCard,
   TrendingUp,
   PieChartIcon,
@@ -16,7 +15,9 @@ import {
   FileText,
   Target,
   Tags,
-  Landmark, // Added for Accounts
+  Landmark,
+  WalletCards,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +25,8 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
   SheetClose,
+  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
@@ -43,8 +44,9 @@ interface NavItem {
 
 const mainNavItemsMobile: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
-  { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" }, // New Accounts Link
-  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
+  { href: "/budgets", label: "Budget Center", icon: WalletCards, section: "Overview" },
+  { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" },
+  { href: "/budgets/category", label: "Category Budgets", icon: ListChecks, section: "Management" },
   { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },

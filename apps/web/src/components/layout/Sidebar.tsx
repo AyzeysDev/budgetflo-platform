@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import React, { useState } from "react";
 import {
   LayoutDashboard,
-  Wallet, 
   CreditCard,
   TrendingUp,
   PieChartIcon,
@@ -19,7 +18,9 @@ import {
   FileText,
   Target,
   Tags,
-  Landmark, // Added for Accounts
+  Landmark,
+  WalletCards,
+  ListChecks,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,8 +46,9 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
-  { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" }, // New Accounts Link
-  { href: "/budgets", label: "Budgets", icon: Wallet, section: "Management" },
+  { href: "/budgets", label: "Budget Center", icon: WalletCards, section: "Overview" },
+  { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" },
+  { href: "/budgets/category", label: "Category Budgets", icon: ListChecks, section: "Management" },
   { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
   { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },

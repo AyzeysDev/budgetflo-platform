@@ -44,7 +44,7 @@ interface BudgetFormProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   budgetToEdit: WebAppBudget | null;
-  onSaveSuccess: (budget: WebAppBudget) => void;
+  onSaveSuccess: () => void;
   budgetableCategories: WebAppCategory[];
   currentPeriod: { year: number; month: number };
 }
@@ -153,7 +153,7 @@ export default function BudgetForm({
         throw new Error(result.error || result.errors?.[0]?.msg || "Failed to save budget");
       }
       toast.success(`Budget "${result.data.name}" ${budgetToEdit ? 'updated' : 'created'}!`);
-      onSaveSuccess(result.data as WebAppBudget);
+      onSaveSuccess();
       onOpenChange(false);
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });

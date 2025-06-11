@@ -16,6 +16,8 @@ export interface WebAppCategory {
 
 // Corresponds to BudgetDTO from the backend.
 // 'isRecurring' and 'source' fields have been removed.
+// The optional `category` property is removed from the base type
+// to avoid conflicts with more specific extended types.
 export interface WebAppBudget {
   id: string;
   userId: string;
@@ -30,7 +32,6 @@ export interface WebAppBudget {
   notes: string | null;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
-  category?: WebAppCategory; // Optional: populated on the client for display
 }
 
 // Payload for creating a new budget (overall or category-specific) via BFF
