@@ -44,8 +44,8 @@ const updateTransactionValidationRules = [
 router.get(
   '/',
   [
-    query('startDate').optional().isISO8601().withMessage('Invalid start date format.'),
-    query('endDate').optional().isISO8601().withMessage('Invalid end date format.'),
+    query('year').optional().isInt({ min: 2000, max: 2100 }).withMessage('Invalid year format.'),
+    query('month').optional().isInt({ min: 1, max: 12 }).withMessage('Invalid month format.'),
     query('categoryId').optional().isString(),
     query('accountId').optional().isString(),
   ],
@@ -56,7 +56,7 @@ router.get(
     }
     const { userId } = req.params;
     const filters = req.query;
-    const transactions = await transactionService.getTransactionsByUserId(userId, filters);
+    const transactions = await transactionService.getTransactionsByUserId(userId, filters as any);
     res.status(200).json({ data: transactions });
   })
 );

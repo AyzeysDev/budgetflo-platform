@@ -1,8 +1,8 @@
 // apps/web/src/app/(app)/transactions/TransactionsClientPage.tsx
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import { PlusCircle, ListOrdered, AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { ListOrdered, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -20,6 +20,7 @@ import { WebAppCategory } from '@/types/budget';
 import TransactionForm from './TransactionForm';
 import { DataTable } from './data-table';
 import { columns, TransactionWithDetails } from './columns';
+import { MonthYearPicker } from '../budgets/MonthYearPicker';
 
 interface TransactionsClientPageProps {
   initialTransactions: WebAppTransaction[];
@@ -37,12 +38,14 @@ export default function TransactionsClientPage({
   const [editingTransaction, setEditingTransaction] = useState<WebAppTransaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<WebAppTransaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [period, setPeriod] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+  const isInitialMount = useRef(true);
 
   // Re-fetch transactions
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async (year: number, month: number) => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/transactions');
+      const response = await fetch(`/api/transactions?year=${year}&month=${month}`);
       if (!response.ok) throw new Error('Failed to fetch transactions.');
       const data = await response.json();
       setTransactions(data.data || []);
@@ -51,6 +54,30 @@ export default function TransactionsClientPage({
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+    }
+    fetchTransactions(period.year, period.month);
+  }, [period, fetchTransactions]);
+
+  const changeMonth = (direction: 'next' | 'prev') => {
+    setPeriod(current => {
+        let newMonth = direction === 'next' ? current.month + 1 : current.month - 1;
+        let newYear = current.year;
+        if (newMonth > 12) {
+            newMonth = 1;
+            newYear++;
+        }
+        if (newMonth < 1) {
+            newMonth = 12;
+            newYear--;
+        }
+        return { year: newYear, month: newMonth };
+    });
   };
 
   const handleAddClick = () => {
@@ -58,10 +85,10 @@ export default function TransactionsClientPage({
     setIsFormOpen(true);
   };
 
-  const handleEditClick = (transaction: WebAppTransaction) => {
+  const handleEditClick = useCallback((transaction: WebAppTransaction) => {
     setEditingTransaction(transaction);
     setIsFormOpen(true);
-  };
+  }, []);
 
   const handleDeleteConfirm = async () => {
     if (!transactionToDelete) return;
@@ -74,7 +101,7 @@ export default function TransactionsClientPage({
         throw new Error(errorData.error);
       }
       toast.success("Transaction deleted successfully.", { id: toastId });
-      fetchTransactions(); // Refetch to update list
+      fetchTransactions(period.year, period.month); // Refetch to update list
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
     } finally {
@@ -83,7 +110,7 @@ export default function TransactionsClientPage({
   };
 
   const onSaveSuccess = () => {
-    fetchTransactions(); // Refetch data after any save operation
+    fetchTransactions(period.year, period.month); // Refetch data after any save operation
   };
   
   const transactionsWithDetails = useMemo((): TransactionWithDetails[] => {
@@ -97,7 +124,12 @@ export default function TransactionsClientPage({
     }));
   }, [transactions, categories, accounts]);
 
-  const tableColumns = useMemo(() => columns(handleEditClick, setTransactionToDelete), []);
+  const tableColumns = useMemo(() => columns(handleEditClick, setTransactionToDelete), [handleEditClick]);
+
+  const selectedPeriodDisplay = useMemo(() => {
+    const date = new Date(period.year, period.month - 1, 1);
+    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+  }, [period]);
 
   return (
     <>
@@ -109,20 +141,25 @@ export default function TransactionsClientPage({
               Transactions
             </h1>
             <p className="text-muted-foreground mt-1">
-              Your complete history of income and expenses.
+              Your financial history for <span className="font-semibold text-primary">{selectedPeriodDisplay}</span>.
             </p>
           </div>
-          <Button onClick={handleAddClick}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Transaction
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => changeMonth('prev')} disabled={isLoading}><ChevronLeft className="h-4 w-4" /></Button>
+            <MonthYearPicker
+              currentPeriod={period}
+              onPeriodChange={setPeriod}
+              disabled={isLoading}
+            />
+            <Button variant="outline" size="icon" onClick={() => changeMonth('next')} disabled={isLoading}><ChevronRight className="h-4 w-4" /></Button>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Transaction History</CardTitle>
             <CardDescription>
-              A detailed list of your recent financial activities.
+              A detailed list of your financial activities for the selected month.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -165,6 +202,16 @@ export default function TransactionsClientPage({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Floating Action Button */}
+      <Button
+        onClick={handleAddClick}
+        className="fixed bottom-6 right-6 z-50 h-14 rounded-full shadow-lg flex items-center justify-center gap-2 group md:w-14"
+        aria-label="Add new transaction"
+      >
+        <Plus className="h-6 w-6 text-primary-foreground transition-transform group-hover:rotate-90" />
+        <span className="md:hidden pr-2 font-semibold">Add</span>
+      </Button>
     </>
   );
 }

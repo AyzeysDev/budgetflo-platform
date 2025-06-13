@@ -32,6 +32,10 @@ async function getPageData(userId: string, cookieHeader: string | null): Promise
     console.error("TransactionsPage (getPageData):", errorMsg);
     return { data: null, error: errorMsg };
   }
+    
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
 
   const fetchOptions: RequestInit = {
     method: 'GET',
@@ -43,7 +47,7 @@ async function getPageData(userId: string, cookieHeader: string | null): Promise
   };
 
   const urls = {
-    transactions: new URL(`/api/transactions`, baseUrl).toString(),
+    transactions: new URL(`/api/transactions?year=${year}&month=${month}`, baseUrl).toString(),
     accounts: new URL(`/api/accounts`, baseUrl).toString(),
     categories: new URL(`/api/categories`, baseUrl).toString(),
   };

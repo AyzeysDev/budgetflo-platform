@@ -148,26 +148,22 @@ export async function createTransaction(userId: string, payload: CreateTransacti
 }
 
 
-export async function getTransactionsByUserId(userId: string, filters: { startDate?: string, endDate?: string, categoryId?: string, accountId?: string } = {}): Promise<TransactionDTO[]> {
+export async function getTransactionsByUserId(userId: string, filters: { year?: string, month?: string, categoryId?: string, accountId?: string } = {}): Promise<TransactionDTO[]> {
     let query: FirebaseFirestore.Query<Transaction> = transactionsCollection.where('userId', '==', userId);
 
-    if (filters.startDate) {
-        query = query.where('date', '>=', new Date(filters.startDate));
+    if (filters.year && filters.month) {
+        const year = parseInt(filters.year, 10);
+        const month = parseInt(filters.month, 10) -1; // JS months are 0-indexed
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query = query.where('date', '>=', startDate).where('date', '<=', endDate);
     }
-    if (filters.endDate) {
-        query = query.where('date', '<=', new Date(filters.endDate));
-    }
+
     if (filters.categoryId) {
         query = query.where('categoryId', '==', filters.categoryId);
     }
     if (filters.accountId) {
         query = query.where('accountId', '==', filters.accountId);
-    }
-
-    if (!filters.startDate && !filters.endDate) {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        query = query.where('date', '>=', thirtyDaysAgo);
     }
 
     const snapshot = await query.orderBy('date', 'desc').get();
