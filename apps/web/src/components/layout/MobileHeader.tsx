@@ -2,22 +2,23 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import React from "react";
 import {
-  Menu,
-  PiggyBank,
-  LayoutDashboard,
   CreditCard,
   TrendingUp,
-  PieChartIcon,
   Settings,
   LogOut,
-  BotMessageSquare,
-  FileText,
+  Menu,
   Target,
-  Tags,
+  BotMessageSquare,
+  PiggyBank,
   Landmark,
   WalletCards,
   ListChecks,
+  Home,
+  Tag,
+  PieChart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,13 +26,11 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetClose,
   SheetTrigger,
+  SheetClose,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
-import { usePathname } from "next/navigation";
-import React from "react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { cn } from "@/lib/utils";
 
@@ -42,23 +41,19 @@ interface NavItem {
   section?: string;
 }
 
-const mainNavItemsMobile: NavItem[] = [
-  { href: "/home", label: "Dashboard", icon: LayoutDashboard, section: "Overview" },
+const navItems = [
+  { href: "/home", label: "Dashboard", icon: Home, section: "Overview" },
   { href: "/budgets", label: "Budget Center", icon: WalletCards, section: "Overview" },
   { href: "/accounts", label: "Accounts", icon: Landmark, section: "Management" },
   { href: "/budgets/category", label: "Category Budgets", icon: ListChecks, section: "Management" },
-  { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
+  { href: "/categories", label: "Categories", icon: Tag, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
-  { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },
-  { href: "/reports", label: "Reports", icon: PieChartIcon, section: "Analysis" },
+  { href: "/goals-trackers", label: "Goals & Trackers", icon: Target, section: "Trackers" },
+  { href: "/reports", label: "Reports", icon: PieChart, section: "Analysis" },
   { href: "/trends", label: "Trend Tracking", icon: TrendingUp, section: "Analysis" },
   { href: "/insights", label: "AI Insights", icon: BotMessageSquare, section: "Analysis" },
-  { href: "/loans-savings", label: "Loans & Savings", icon: FileText, section: "Trackers" },
+  { href: "/settings", label: "Settings", icon: Settings, section: "System" },
 ];
-const settingsNavItemsMobile: NavItem[] = [
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-
 
 export function MobileHeader() {
   const { data: session } = useSession();
@@ -72,10 +67,10 @@ export function MobileHeader() {
     : "?";
 
   const navSectionsMobile: { title: string; items: NavItem[] }[] = [
-    { title: "Overview", items: mainNavItemsMobile.filter(item => item.section === "Overview") },
-    { title: "Management", items: mainNavItemsMobile.filter(item => item.section === "Management") },
-    { title: "Analysis", items: mainNavItemsMobile.filter(item => item.section === "Analysis") },
-    { title: "Trackers", items: mainNavItemsMobile.filter(item => item.section === "Trackers") },
+    { title: "Overview", items: navItems.filter(item => item.section === "Overview") },
+    { title: "Management", items: navItems.filter(item => item.section === "Management") },
+    { title: "Analysis", items: navItems.filter(item => item.section === "Analysis") },
+    { title: "Trackers", items: navItems.filter(item => item.section === "Trackers") },
   ];
 
   return (
@@ -130,7 +125,7 @@ export function MobileHeader() {
             ))}
           </nav>
           <div className="mt-auto border-t p-3 space-y-2">
-            {settingsNavItemsMobile.map((item) => (
+            {navItems.filter(item => item.section === "System").map((item) => (
                <SheetClose asChild key={item.href}>
                 <Link
                   href={item.href}

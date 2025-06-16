@@ -7,6 +7,8 @@ import categoryRoutes from './routes/categoryRoutes';
 import budgetRoutes from './routes/budgetRoutes'; 
 import accountRoutes from './routes/accountRoutes';
 import transactionRoutes from './routes/transactionRoutes'; // Import transaction routes
+import goalRoutes from './routes/goalRoutes'; // Import goal routes
+import trackerRoutes from './routes/trackerRoutes'; // Import tracker routes
 import { firebaseInitialized } from './config/firebase';
 
 dotenv.config();
@@ -57,6 +59,8 @@ userScopedRouter.use('/categories', categoryRoutes);
 userScopedRouter.use('/budgets', budgetRoutes);
 userScopedRouter.use('/accounts', accountRoutes);
 userScopedRouter.use('/transactions', transactionRoutes); // Add transaction routes
+userScopedRouter.use('/goals', goalRoutes); // Add goal routes
+userScopedRouter.use('/trackers', trackerRoutes); // Add tracker routes
 
 app.use('/api/users/:userId', authenticateUserForScopedResources, userScopedRouter);
 

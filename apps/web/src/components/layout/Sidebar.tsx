@@ -15,7 +15,6 @@ import {
   ChevronRight,
   PiggyBank,
   BotMessageSquare,
-  FileText,
   Target,
   Tags,
   Landmark,
@@ -51,11 +50,11 @@ const mainNavItems: NavItem[] = [
   { href: "/budgets/category", label: "Category Budgets", icon: ListChecks, section: "Management" },
   { href: "/categories", label: "Categories", icon: Tags, section: "Management" },
   { href: "/transactions", label: "Transactions", icon: CreditCard, section: "Management" },
-  { href: "/goals", label: "Financial Goals", icon: Target, section: "Management" },
+  { href: "/goals-trackers", label: "Goals & Trackers", icon: Target, section: "Trackers" },
   { href: "/reports", label: "Reports", icon: PieChartIcon, section: "Analysis" },
   { href: "/trends", label: "Trend Tracking", icon: TrendingUp, section: "Analysis" },
   { href: "/insights", label: "AI Insights", icon: BotMessageSquare, section: "Analysis" },
-  { href: "/loans-savings", label: "Loans & Savings", icon: FileText, section: "Trackers" },
+  { href: "/settings", label: "Settings", icon: Settings, section: "System" },
 ];
 
 const settingsNavItems: NavItem[] = [
