@@ -31,6 +31,7 @@ export interface WebAppSavingsTracker {
   linkedAccountId: string;
   linkedGoalId: string | null;
   monthlyTarget: number | null;
+  overallTarget: number | null;
   isActive: boolean;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
@@ -63,12 +64,14 @@ export interface WebAppCreateSavingsTrackerPayload {
   linkedAccountId: string;
   linkedGoalId?: string | null;
   monthlyTarget?: number | null;
+  overallTarget?: number | null;
 }
 
 export interface WebAppUpdateSavingsTrackerPayload {
   name?: string;
   linkedGoalId?: string | null;
   monthlyTarget?: number | null;
+  overallTarget?: number | null;
   isActive?: boolean;
 }
 

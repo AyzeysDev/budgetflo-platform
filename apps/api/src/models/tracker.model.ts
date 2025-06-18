@@ -27,6 +27,7 @@ export interface SavingsTracker {
   linkedAccountId: string;
   linkedGoalId: string | null;
   monthlyTarget: number | null;
+  overallTarget: number | null;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -73,12 +74,14 @@ export interface CreateSavingsTrackerPayload {
   linkedAccountId: string;
   linkedGoalId?: string | null;
   monthlyTarget?: number | null;
+  overallTarget?: number | null;
 }
 
 export interface UpdateSavingsTrackerPayload {
   name?: string;
   linkedGoalId?: string | null;
   monthlyTarget?: number | null;
+  overallTarget?: number | null;
   isActive?: boolean;
 }
 

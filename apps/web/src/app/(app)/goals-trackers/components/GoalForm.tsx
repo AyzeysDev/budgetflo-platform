@@ -46,6 +46,18 @@ export default function GoalForm({
 }: GoalFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+  // Debug accounts data
+  React.useEffect(() => {
+    if (open) {
+      console.log('GoalForm - All accounts:', accounts);
+      console.log('GoalForm - Accounts length:', accounts?.length || 0);
+      console.log('GoalForm - Sample account:', accounts?.[0]);
+      const filtered = accounts.filter(account => ['savings', 'checking', 'investment'].includes(account.type));
+      console.log('GoalForm - Filtered accounts:', filtered);
+      console.log('GoalForm - Filtered length:', filtered.length);
+    }
+  }, [open, accounts]);
+
   const {
     register,
     handleSubmit,
@@ -60,10 +72,48 @@ export default function GoalForm({
       targetAmount: 0,
       targetDate: format(new Date(), 'yyyy-MM-dd'),
       description: '',
-      categoryId: '',
-      linkedAccountId: '',
+      categoryId: 'none',
+      linkedAccountId: 'none',
     },
   });
+
+  // Calculate suggested monthly contribution
+  const targetAmount = watch('targetAmount');
+  const targetDate = watch('targetDate');
+  
+  const getSuggestedContribution = () => {
+    if (!targetAmount || !targetDate || targetAmount <= 0) return null;
+    
+    const today = new Date();
+    const target = new Date(targetDate);
+    const monthsUntilTarget = Math.max(1, Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+    
+    return Math.ceil(targetAmount / monthsUntilTarget);
+  };
+
+  const suggestedContribution = getSuggestedContribution();
+
+  // Filter asset accounts for goals - HARDCODED ROBUST FILTERING
+  const assetAccounts = React.useMemo(() => {
+    if (!accounts || !Array.isArray(accounts)) {
+      console.log('GoalForm - No accounts or not array:', accounts);
+      return [];
+    }
+    
+    const filtered = accounts.filter(account => {
+      if (!account || !account.type) {
+        console.log('GoalForm - Invalid account:', account);
+        return false;
+      }
+      
+      const isAsset = ['savings', 'checking', 'investment', 'cash', 'property', 'other_asset'].includes(account.type);
+      console.log(`GoalForm - Account "${account.name}" (${account.type}): ${isAsset ? 'INCLUDED' : 'EXCLUDED'}`);
+      return isAsset;
+    });
+    
+    console.log('GoalForm - Final filtered accounts:', filtered);
+    return filtered;
+  }, [accounts]);
 
   React.useEffect(() => {
     if (goal) {
@@ -72,8 +122,8 @@ export default function GoalForm({
         targetAmount: goal.targetAmount,
         targetDate: format(new Date(goal.targetDate), 'yyyy-MM-dd'),
         description: goal.description || '',
-        categoryId: goal.categoryId || '',
-        linkedAccountId: goal.linkedAccountId || '',
+        categoryId: goal.categoryId || 'none',
+        linkedAccountId: goal.linkedAccountId || 'none',
       });
     } else {
       reset({
@@ -81,8 +131,8 @@ export default function GoalForm({
         targetAmount: 0,
         targetDate: format(new Date(), 'yyyy-MM-dd'),
         description: '',
-        categoryId: '',
-        linkedAccountId: '',
+        categoryId: 'none',
+        linkedAccountId: 'none',
       });
     }
   }, [goal, reset]);
@@ -95,8 +145,8 @@ export default function GoalForm({
       
       const payload: WebAppCreateGoalPayload | WebAppUpdateGoalPayload = {
         ...data,
-        categoryId: data.categoryId || null,
-        linkedAccountId: data.linkedAccountId || null,
+        categoryId: data.categoryId === 'none' || !data.categoryId ? null : data.categoryId,
+        linkedAccountId: data.linkedAccountId === 'none' || !data.linkedAccountId ? null : data.linkedAccountId,
       };
 
       const response = await fetch(url, {
@@ -123,12 +173,12 @@ export default function GoalForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{goal ? 'Edit Goal' : 'Create New Goal'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="name">Goal Name</Label>
             <Input
               id="name"
@@ -141,7 +191,7 @@ export default function GoalForm({
             )}
           </div>
 
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="targetAmount">Target Amount</Label>
             <Input
               id="targetAmount"
@@ -156,7 +206,7 @@ export default function GoalForm({
             )}
           </div>
 
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="targetDate">Target Date</Label>
             <Input
               id="targetDate"
@@ -167,19 +217,25 @@ export default function GoalForm({
             {errors.targetDate && (
               <p className="text-sm text-destructive mt-1">{errors.targetDate.message}</p>
             )}
+            {suggestedContribution && (
+              <div className="text-xs text-muted-foreground mt-1 p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded-md">
+                <p className="font-medium text-yellow-700 dark:text-yellow-300">💡 Save ${suggestedContribution.toLocaleString()}/month to reach your goal</p>
+              </div>
+            )}
           </div>
 
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="description">Description (Optional)</Label>
             <Textarea
               id="description"
               {...register('description')}
               placeholder="What is this goal for?"
               disabled={isSubmitting}
+              rows={2}
             />
           </div>
 
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="categoryId">Category (Optional)</Label>
             <Select
               value={watch('categoryId')}
@@ -190,7 +246,7 @@ export default function GoalForm({
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.name}
@@ -200,7 +256,7 @@ export default function GoalForm({
             </Select>
           </div>
 
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="linkedAccountId">Linked Account (Optional)</Label>
             <Select
               value={watch('linkedAccountId')}
@@ -208,17 +264,36 @@ export default function GoalForm({
               disabled={isSubmitting}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select an account" />
+                <SelectValue placeholder="Select a savings account" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
-                {accounts.map((account) => (
-                  <SelectItem key={account.accountId} value={account.accountId}>
-                    {account.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="none">None</SelectItem>
+                {assetAccounts.length > 0 ? (
+                  assetAccounts.map((account) => (
+                    <SelectItem key={account.accountId} value={account.accountId}>
+                      {account.name} ({account.type.replace('_', ' ')})
+                    </SelectItem>
+                  ))
+                ) : (
+                  // Fallback: show all accounts if filtering fails
+                  accounts?.map((account) => (
+                    <SelectItem key={account.accountId} value={account.accountId}>
+                      {account.name} ({account.type.replace('_', ' ')}) [ALL]
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {assetAccounts.length === 0 && accounts?.length > 0 && (
+              <p className="text-sm text-blue-600 mt-1">
+                ℹ️ Showing all accounts. Recommended: Create savings/checking/investment accounts for better goal tracking.
+              </p>
+            )}
+            {(!accounts || accounts.length === 0) && (
+              <p className="text-sm text-amber-600 mt-1">
+                ⚠️ No accounts available. Create accounts first to link with goals.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

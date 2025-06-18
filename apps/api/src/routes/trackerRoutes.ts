@@ -180,6 +180,7 @@ router.post(
     body('linkedAccountId').notEmpty(),
     body('linkedGoalId').optional(),
     body('monthlyTarget').optional().isFloat({ min: 0 }),
+    body('overallTarget').optional().isFloat({ min: 0 }),
   ],
   handleValidationErrors,
   asyncHandler(async (req: Request, res: Response) => {
@@ -202,6 +203,7 @@ router.put(
     body('name').optional().trim(),
     body('linkedGoalId').optional(),
     body('monthlyTarget').optional().isFloat({ min: 0 }),
+    body('overallTarget').optional().isFloat({ min: 0 }),
     body('isActive').optional().isBoolean(),
   ],
   handleValidationErrors,

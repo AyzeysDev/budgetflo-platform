@@ -18,12 +18,14 @@ import {
   Plus,
   Target,
   Calendar,
-  DollarSign
+  DollarSign,
+  BarChart3
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { WebAppGoal } from '@/types/goal';
 import { toast } from 'sonner';
 import GoalContributionDialog from './GoalContributionDialog';
+import ProgressModal from './ProgressModal';
 
 interface GoalsListProps {
   goals: WebAppGoal[];
@@ -35,6 +37,7 @@ interface GoalsListProps {
 export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsListProps) {
   const [contributionGoal, setContributionGoal] = React.useState<WebAppGoal | null>(null);
   const [deletingGoalId, setDeletingGoalId] = React.useState<string | null>(null);
+  const [progressGoal, setProgressGoal] = React.useState<WebAppGoal | null>(null);
 
   const handleDelete = async (goalId: string) => {
     if (!confirm('Are you sure you want to delete this goal?')) return;
@@ -109,6 +112,10 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setProgressGoal(goal)}>
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      View Progress
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onEdit(goal)}>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
@@ -182,6 +189,15 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
             onUpdate(updatedGoal);
             setContributionGoal(null);
           }}
+        />
+      )}
+
+      {progressGoal && (
+        <ProgressModal
+          item={progressGoal}
+          type="goal"
+          open={!!progressGoal}
+          onOpenChange={(open) => !open && setProgressGoal(null)}
         />
       )}
     </>

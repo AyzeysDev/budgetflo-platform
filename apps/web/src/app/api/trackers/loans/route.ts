@@ -64,4 +64,77 @@ export async function POST(request: NextRequest) {
     console.error('Error creating loan tracker:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { trackerId, ...updateData } = body;
+    
+    if (!trackerId) {
+      return NextResponse.json({ error: 'Tracker ID is required for updates' }, { status: 400 });
+    }
+
+    const url = `${API_BASE_URL}/api/users/${session.user.id}/trackers/loans/${trackerId}`;
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Authenticated-User-Id': session.user.id,
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return NextResponse.json(error, { status: response.status });
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Error updating loan tracker:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { trackerId } = body;
+    
+    if (!trackerId) {
+      return NextResponse.json({ error: 'Tracker ID is required for deletion' }, { status: 400 });
+    }
+
+    const url = `${API_BASE_URL}/api/users/${session.user.id}/trackers/loans/${trackerId}`;
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'X-Authenticated-User-Id': session.user.id,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return NextResponse.json(error, { status: response.status });
+    }
+
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    console.error('Error deleting loan tracker:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 } 

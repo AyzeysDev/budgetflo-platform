@@ -31,28 +31,6 @@ export default function GoalsTrackersClientPage({
   accounts,
   categories,
 }: GoalsTrackersClientPageProps) {
-  // Debug logging
-  console.log('GoalsTrackersClientPage - accounts:', accounts, 'type:', typeof accounts, 'isArray:', Array.isArray(accounts));
-  console.log('GoalsTrackersClientPage - categories:', categories, 'type:', typeof categories, 'isArray:', Array.isArray(categories));
-  
-  // Helper function to safely get accounts array
-  const getAccountsArray = (): WebAppAccount[] => {
-    if (Array.isArray(accounts)) {
-      return accounts;
-    }
-    console.warn('Accounts is not an array:', accounts);
-    return [];
-  };
-  
-  // Helper function to safely get categories array
-  const getCategoriesArray = (): WebAppCategory[] => {
-    if (Array.isArray(categories)) {
-      return categories;
-    }
-    console.warn('Categories is not an array:', categories);
-    return [];
-  };
-  
   const [goals, setGoals] = useState<WebAppGoal[]>(initialGoals);
   const [loanTrackers, setLoanTrackers] = useState<WebAppLoanTracker[]>(initialLoanTrackers);
   const [savingsTrackers, setSavingsTrackers] = useState<WebAppSavingsTracker[]>(initialSavingsTrackers);
@@ -64,6 +42,23 @@ export default function GoalsTrackersClientPage({
   const [editingGoal, setEditingGoal] = useState<WebAppGoal | null>(null);
   const [editingLoanTracker, setEditingLoanTracker] = useState<WebAppLoanTracker | null>(null);
   const [editingSavingsTracker, setEditingSavingsTracker] = useState<WebAppSavingsTracker | null>(null);
+
+  // Debug accounts data
+  React.useEffect(() => {
+    console.log('GoalsTrackersClientPage - Accounts received:', accounts);
+    console.log('GoalsTrackersClientPage - Accounts length:', accounts?.length || 0);
+    console.log('GoalsTrackersClientPage - Sample account:', accounts?.[0]);
+  }, [accounts]);
+
+  const getAccountsArray = (): WebAppAccount[] => {
+    const result = accounts ? (Array.isArray(accounts) ? accounts : []) : [];
+    console.log('GoalsTrackersClientPage - getAccountsArray result:', result);
+    return result;
+  };
+
+  const getCategoriesArray = (): WebAppCategory[] => {
+    return categories ? (Array.isArray(categories) ? categories : []) : [];
+  };
 
   const handleGoalSaved = (goal: WebAppGoal) => {
     if (editingGoal) {
@@ -240,7 +235,7 @@ export default function GoalsTrackersClientPage({
           if (!open) setEditingLoanTracker(null);
         }}
         tracker={editingLoanTracker}
-        accounts={getAccountsArray().filter(a => ['home_loan', 'personal_loan', 'car_loan', 'student_loan'].includes(a.type))}
+        accounts={getAccountsArray()}
         onSave={handleLoanTrackerSaved}
       />
 
@@ -251,7 +246,7 @@ export default function GoalsTrackersClientPage({
           if (!open) setEditingSavingsTracker(null);
         }}
         tracker={editingSavingsTracker}
-        accounts={getAccountsArray().filter(a => a.type === 'savings')}
+        accounts={getAccountsArray()}
         goals={goals.filter(g => g.status === 'in_progress')}
         onSave={handleSavingsTrackerSaved}
       />

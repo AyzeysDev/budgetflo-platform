@@ -24,7 +24,14 @@ async function fetchData<T>(url: string): Promise<T | null> {
       return null;
     }
 
-    return response.json();
+    const result = await response.json();
+    
+    // Handle different API response formats
+    if (url.includes('/accounts') && result.data) {
+      return result.data as T;
+    }
+    
+    return result as T;
   } catch (error) {
     console.error(`Error fetching from ${url}:`, error);
     return null;

@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = `${API_BASE_URL}/api/users/${session.user.id}/goals/${params.goalId}/contributions`;
+    const { goalId } = await params;
+    const url = `${API_BASE_URL}/api/users/${session.user.id}/goals/${goalId}/contributions`;
 
     const response = await fetch(url, {
       headers: {
@@ -46,7 +47,8 @@ export async function POST(
     }
 
     const body = await request.json();
-    const url = `${API_BASE_URL}/api/users/${session.user.id}/goals/${params.goalId}/contributions`;
+    const { goalId } = await params;
+    const url = `${API_BASE_URL}/api/users/${session.user.id}/goals/${goalId}/contributions`;
 
     const response = await fetch(url, {
       method: 'POST',

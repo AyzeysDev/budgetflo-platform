@@ -253,6 +253,7 @@ export async function createSavingsTracker(userId: string, payload: CreateSaving
     linkedAccountId: payload.linkedAccountId,
     linkedGoalId: payload.linkedGoalId || null,
     monthlyTarget: payload.monthlyTarget || null,
+    overallTarget: payload.overallTarget || null,
     isActive: true,
     createdAt: FieldValue.serverTimestamp() as Timestamp,
     updatedAt: FieldValue.serverTimestamp() as Timestamp,
