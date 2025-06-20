@@ -54,12 +54,22 @@ function calculateLoanMetrics(tracker: LoanTracker): { completionPercentage: num
 function convertLoanTrackerToDTO(tracker: LoanTracker): LoanTrackerDTO {
   const metrics = calculateLoanMetrics(tracker);
   
+  // Helper to safely convert a timestamp
+  const toISOString = (ts: unknown) => {
+    if (ts && typeof (ts as Timestamp).toDate === 'function') {
+      return (ts as Timestamp).toDate().toISOString();
+    }
+    // If it's already a Date object or string, just return it.
+    // Fallback for serverTimestamp pending writes.
+    return new Date().toISOString();
+  };
+
   return {
     ...tracker,
-    startDate: (tracker.startDate as Timestamp).toDate().toISOString(),
-    nextDueDate: (tracker.nextDueDate as Timestamp).toDate().toISOString(),
-    createdAt: (tracker.createdAt as Timestamp).toDate().toISOString(),
-    updatedAt: (tracker.updatedAt as Timestamp).toDate().toISOString(),
+    startDate: toISOString(tracker.startDate),
+    nextDueDate: toISOString(tracker.nextDueDate),
+    createdAt: toISOString(tracker.createdAt),
+    updatedAt: toISOString(tracker.updatedAt),
     ...metrics,
   };
 }
@@ -85,10 +95,18 @@ async function convertSavingsTrackerToDTO(tracker: SavingsTracker): Promise<Savi
     goalProgress = 0;
   }
 
+  // Helper to safely convert a timestamp
+  const toISOString = (ts: unknown) => {
+    if (ts && typeof (ts as Timestamp).toDate === 'function') {
+      return (ts as Timestamp).toDate().toISOString();
+    }
+    return new Date().toISOString();
+  };
+
   return {
     ...tracker,
-    createdAt: (tracker.createdAt as Timestamp).toDate().toISOString(),
-    updatedAt: (tracker.updatedAt as Timestamp).toDate().toISOString(),
+    createdAt: toISOString(tracker.createdAt),
+    updatedAt: toISOString(tracker.updatedAt),
     currentBalance,
     goalProgress,
   };
@@ -123,7 +141,11 @@ export async function createLoanTracker(userId: string, payload: CreateLoanTrack
 
   await newTrackerRef.set(newTracker);
   const createdDoc = await newTrackerRef.get();
-  return convertLoanTrackerToDTO(createdDoc.data() as LoanTracker);
+  const createdData = createdDoc.data();
+  if (!createdData) {
+    throw new Error("Failed to create loan tracker: document data is empty.");
+  }
+  return convertLoanTrackerToDTO(createdData);
 }
 
 // Get all loan trackers for a user
@@ -162,13 +184,26 @@ export async function updateLoanTracker(
     throw new Error('Unauthorized access to loan tracker');
   }
 
-  await trackerRef.update({
+  const updateData: { [key: string]: any } = {
     ...payload,
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+
+  if (payload.startDate) {
+    updateData.startDate = Timestamp.fromDate(new Date(payload.startDate));
+  }
+  if (payload.nextDueDate) {
+    updateData.nextDueDate = Timestamp.fromDate(new Date(payload.nextDueDate));
+  }
+
+  await trackerRef.update(updateData);
 
   const updatedDoc = await trackerRef.get();
-  return convertLoanTrackerToDTO(updatedDoc.data() as LoanTracker);
+  const updatedData = updatedDoc.data();
+  if (!updatedData) {
+    throw new Error("Failed to update loan tracker: document data is empty.");
+  }
+  return convertLoanTrackerToDTO(updatedData);
 }
 
 // Record an EMI payment
@@ -221,13 +256,13 @@ export async function recordEMIPayment(
       });
     }
 
-    return {
-      ...tracker,
-      paidInstallments: newPaidInstallments,
-      remainingBalance: newRemainingBalance,
-      nextDueDate: Timestamp.fromDate(newDueDate),
-    } as LoanTracker;
-  }).then(updatedTracker => convertLoanTrackerToDTO(updatedTracker));
+    const updatedTrackerDoc = await transaction.get(trackerRef);
+    const updatedData = updatedTrackerDoc.data();
+    if (!updatedData) {
+        throw new Error('Loan tracker not found after update');
+    }
+    return convertLoanTrackerToDTO(updatedData);
+  });
 }
 
 // Create a savings tracker
@@ -261,7 +296,11 @@ export async function createSavingsTracker(userId: string, payload: CreateSaving
 
   await newTrackerRef.set(newTracker);
   const createdDoc = await newTrackerRef.get();
-  return convertSavingsTrackerToDTO(createdDoc.data() as SavingsTracker);
+  const createdData = createdDoc.data();
+  if (!createdData) {
+    throw new Error("Failed to create savings tracker: document data is empty.");
+  }
+  return await convertSavingsTrackerToDTO(createdData);
 }
 
 // Get all savings trackers for a user
@@ -308,7 +347,11 @@ export async function updateSavingsTracker(
   });
 
   const updatedDoc = await trackerRef.get();
-  return convertSavingsTrackerToDTO(updatedDoc.data() as SavingsTracker);
+  const updatedData = updatedDoc.data();
+  if (!updatedData) {
+    return null;
+  }
+  return await convertSavingsTrackerToDTO(updatedData);
 }
 
 // Delete a tracker (loan or savings)

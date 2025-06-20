@@ -25,6 +25,14 @@ import type { WebAppAccount } from '@/types/account';
 import type { WebAppGoal } from '@/types/goal';
 import { toast } from 'sonner';
 import ProgressModal from './ProgressModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface SavingsTrackersListProps {
   trackers: WebAppSavingsTracker[];
@@ -43,30 +51,27 @@ export default function SavingsTrackersList({
   onDelete 
 }: SavingsTrackersListProps) {
   const [progressTracker, setProgressTracker] = React.useState<WebAppSavingsTracker | null>(null);
-  const [deletingTrackerId, setDeletingTrackerId] = React.useState<string | null>(null);
+  const [trackerToDelete, setTrackerToDelete] = React.useState<WebAppSavingsTracker | null>(null);
 
-  const handleDelete = async (trackerId: string) => {
-    if (!confirm('Are you sure you want to delete this savings tracker?')) return;
-    
-    setDeletingTrackerId(trackerId);
+  const handleDelete = async () => {
+    if (!trackerToDelete) return;
+
+    const toastId = toast.loading('Deleting savings tracker...');
     try {
-      const response = await fetch(`/api/trackers/savings`, {
+      const response = await fetch(`/api/trackers/savings?id=${trackerToDelete.trackerId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackerId }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to delete savings tracker');
       }
 
-      onDelete(trackerId);
-      toast.success('Savings tracker deleted successfully');
-    } catch (error) {
-      console.error('Error deleting savings tracker:', error);
-      toast.error('Failed to delete savings tracker');
+      onDelete(trackerToDelete.trackerId);
+      toast.success('Savings tracker deleted successfully', { id: toastId });
+    } catch {
+      toast.error('Failed to delete savings tracker', { id: toastId });
     } finally {
-      setDeletingTrackerId(null);
+      setTrackerToDelete(null);
     }
   };
 
@@ -124,7 +129,7 @@ export default function SavingsTrackersList({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        disabled={deletingTrackerId === tracker.trackerId}
+                        disabled={trackerToDelete === tracker}
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
@@ -138,9 +143,9 @@ export default function SavingsTrackersList({
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(tracker.trackerId)}
+                      <DropdownMenuItem 
                         className="text-destructive"
+                        onClick={() => setTrackerToDelete(tracker)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
@@ -218,6 +223,23 @@ export default function SavingsTrackersList({
           open={!!progressTracker}
           onOpenChange={(open) => !open && setProgressTracker(null)}
         />
+      )}
+
+      {trackerToDelete && (
+        <Dialog open={!!trackerToDelete} onOpenChange={() => setTrackerToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Savings Tracker</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the savings tracker &quot;{trackerToDelete.name}&quot;? This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTrackerToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

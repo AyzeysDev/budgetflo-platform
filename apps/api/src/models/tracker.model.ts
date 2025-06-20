@@ -67,6 +67,8 @@ export interface UpdateLoanTrackerPayload {
   linkedAccountId?: string | null;
   emiAmount?: number;
   isActive?: boolean;
+  startDate?: string;
+  nextDueDate?: string;
 }
 
 export interface CreateSavingsTrackerPayload {

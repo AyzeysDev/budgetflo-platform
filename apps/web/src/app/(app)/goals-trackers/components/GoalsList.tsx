@@ -26,6 +26,14 @@ import type { WebAppGoal } from '@/types/goal';
 import { toast } from 'sonner';
 import GoalContributionDialog from './GoalContributionDialog';
 import ProgressModal from './ProgressModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface GoalsListProps {
   goals: WebAppGoal[];
@@ -36,15 +44,15 @@ interface GoalsListProps {
 
 export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsListProps) {
   const [contributionGoal, setContributionGoal] = React.useState<WebAppGoal | null>(null);
-  const [deletingGoalId, setDeletingGoalId] = React.useState<string | null>(null);
+  const [goalToDelete, setGoalToDelete] = React.useState<WebAppGoal | null>(null);
   const [progressGoal, setProgressGoal] = React.useState<WebAppGoal | null>(null);
 
-  const handleDelete = async (goalId: string) => {
-    if (!confirm('Are you sure you want to delete this goal?')) return;
+  const handleConfirmDelete = async () => {
+    if (!goalToDelete) return;
     
-    setDeletingGoalId(goalId);
+    const toastId = toast.loading("Deleting goal...");
     try {
-      const response = await fetch(`/api/goals/${goalId}`, {
+      const response = await fetch(`/api/goals/${goalToDelete.goalId}`, {
         method: 'DELETE',
       });
 
@@ -52,13 +60,12 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
         throw new Error('Failed to delete goal');
       }
 
-      onDelete(goalId);
-      toast.success('Goal deleted successfully');
-    } catch (error) {
-      console.error('Error deleting goal:', error);
-      toast.error('Failed to delete goal');
+      onDelete(goalToDelete.goalId);
+      toast.success('Goal deleted successfully', { id: toastId });
+    } catch {
+      toast.error('Failed to delete goal', { id: toastId });
     } finally {
-      setDeletingGoalId(null);
+      setGoalToDelete(null);
     }
   };
 
@@ -106,7 +113,7 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      disabled={deletingGoalId === goal.goalId}
+                      disabled={!!goalToDelete}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
@@ -121,7 +128,7 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
                       Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleDelete(goal.goalId)}
+                      onClick={() => setGoalToDelete(goal)}
                       className="text-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
@@ -190,6 +197,23 @@ export default function GoalsList({ goals, onEdit, onDelete, onUpdate }: GoalsLi
             setContributionGoal(null);
           }}
         />
+      )}
+
+      {goalToDelete && (
+        <Dialog open={!!goalToDelete} onOpenChange={() => setGoalToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Goal</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the goal &quot;{goalToDelete.name}&quot;? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setGoalToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleConfirmDelete}>Delete</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {progressGoal && (

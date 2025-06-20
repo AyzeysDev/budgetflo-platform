@@ -70,6 +70,10 @@ export default function GoalsTrackersClientPage({
     setEditingGoal(null);
   };
 
+  const handleGoalUpdated = (updatedGoal: WebAppGoal) => {
+    setGoals(goals.map(g => g.goalId === updatedGoal.goalId ? updatedGoal : g));
+  };
+
   const handleGoalDeleted = (goalId: string) => {
     setGoals(goals.filter(g => g.goalId !== goalId));
   };
@@ -136,7 +140,10 @@ export default function GoalsTrackersClientPage({
                   Track your progress towards financial milestones
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsGoalFormOpen(true)}>
+              <Button onClick={() => {
+                setEditingGoal(null);
+                setIsGoalFormOpen(true);
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Goal
               </Button>
@@ -149,7 +156,7 @@ export default function GoalsTrackersClientPage({
                   setIsGoalFormOpen(true);
                 }}
                 onDelete={handleGoalDeleted}
-                onUpdate={handleGoalSaved}
+                onUpdate={handleGoalUpdated}
               />
             </CardContent>
           </Card>
@@ -164,7 +171,10 @@ export default function GoalsTrackersClientPage({
                   Monitor your loan repayments and track EMIs
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsLoanFormOpen(true)}>
+              <Button onClick={() => {
+                setEditingLoanTracker(null);
+                setIsLoanFormOpen(true);
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Loan Tracker
               </Button>
@@ -193,7 +203,10 @@ export default function GoalsTrackersClientPage({
                   Track your savings progress and link to goals
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsSavingsFormOpen(true)}>
+              <Button onClick={() => {
+                setEditingSavingsTracker(null);
+                setIsSavingsFormOpen(true);
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Savings Tracker
               </Button>

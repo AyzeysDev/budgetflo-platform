@@ -25,6 +25,14 @@ import type { WebAppLoanTracker } from '@/types/tracker';
 import type { WebAppAccount } from '@/types/account';
 import { toast } from 'sonner';
 import ProgressModal from './ProgressModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface LoanTrackersListProps {
   trackers: WebAppLoanTracker[];
@@ -41,30 +49,27 @@ export default function LoanTrackersList({
   onDelete 
 }: LoanTrackersListProps) {
   const [progressTracker, setProgressTracker] = React.useState<WebAppLoanTracker | null>(null);
-  const [deletingTrackerId, setDeletingTrackerId] = React.useState<string | null>(null);
+  const [trackerToDelete, setTrackerToDelete] = React.useState<WebAppLoanTracker | null>(null);
 
-  const handleDelete = async (trackerId: string) => {
-    if (!confirm('Are you sure you want to delete this loan tracker?')) return;
-    
-    setDeletingTrackerId(trackerId);
+  const handleDelete = async () => {
+    if (!trackerToDelete) return;
+
+    const toastId = toast.loading('Deleting loan tracker...');
     try {
-      const response = await fetch(`/api/trackers/loans`, {
+      const response = await fetch(`/api/trackers/loans?id=${trackerToDelete.trackerId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackerId }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to delete loan tracker');
       }
 
-      onDelete(trackerId);
-      toast.success('Loan tracker deleted successfully');
-    } catch (error) {
-      console.error('Error deleting loan tracker:', error);
-      toast.error('Failed to delete loan tracker');
+      onDelete(trackerToDelete.trackerId);
+      toast.success('Loan tracker deleted successfully', { id: toastId });
+    } catch {
+      toast.error('Failed to delete loan tracker', { id: toastId });
     } finally {
-      setDeletingTrackerId(null);
+      setTrackerToDelete(null);
     }
   };
 
@@ -115,7 +120,7 @@ export default function LoanTrackersList({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        disabled={deletingTrackerId === tracker.trackerId}
+                        disabled={trackerToDelete === tracker}
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
@@ -129,9 +134,9 @@ export default function LoanTrackersList({
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(tracker.trackerId)}
+                      <DropdownMenuItem 
                         className="text-destructive"
+                        onClick={() => setTrackerToDelete(tracker)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
@@ -207,6 +212,23 @@ export default function LoanTrackersList({
           open={!!progressTracker}
           onOpenChange={(open) => !open && setProgressTracker(null)}
         />
+      )}
+
+      {trackerToDelete && (
+        <Dialog open={!!trackerToDelete} onOpenChange={() => setTrackerToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Loan Tracker</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the loan tracker &quot;{trackerToDelete.name}&quot;? This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTrackerToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
