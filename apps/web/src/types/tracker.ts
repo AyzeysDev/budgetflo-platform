@@ -29,7 +29,6 @@ export interface WebAppSavingsTracker {
   userId: string;
   name: string;
   linkedAccountId: string;
-  linkedGoalId: string | null;
   monthlyTarget: number | null;
   overallTarget: number | null;
   isActive: boolean;
@@ -62,18 +61,12 @@ export interface WebAppUpdateLoanTrackerPayload {
 export interface WebAppCreateSavingsTrackerPayload {
   name: string;
   linkedAccountId: string;
-  linkedGoalId?: string | null;
-  monthlyTarget?: number | null;
-  overallTarget?: number | null;
+  overallTarget: number | null;
 }
 
-export interface WebAppUpdateSavingsTrackerPayload {
-  name?: string;
-  linkedGoalId?: string | null;
-  monthlyTarget?: number | null;
-  overallTarget?: number | null;
-  isActive?: boolean;
-}
+export type WebAppUpdateSavingsTrackerPayload = Partial<WebAppCreateSavingsTrackerPayload> & {
+  trackerId: string;
+};
 
 export interface WebAppRecordEMIPaymentPayload {
   amount: number;

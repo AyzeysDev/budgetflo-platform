@@ -1,42 +1,60 @@
 'use client';
 
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { WebAppGoal } from '@/types/goal';
+import type { WebAppAccount } from '@/types/account';
+import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const contributionSchema = z.object({
   amount: z.number().min(0.01, 'Amount must be greater than 0'),
   description: z.string().optional(),
-  date: z.string().min(1, 'Date is required'),
+  date: z.date({ required_error: 'Date is required' }),
+  accountId: z.string().min(1, 'Source account is required'),
 });
 
 type ContributionFormData = z.infer<typeof contributionSchema>;
 
 interface GoalContributionDialogProps {
   goal: WebAppGoal;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess: (goal: WebAppGoal) => void;
+  accounts: WebAppAccount[];
+  onClose: () => void;
+  onContributionSaved: (goal: WebAppGoal) => void;
 }
 
 export default function GoalContributionDialog({
   goal,
-  open,
-  onOpenChange,
-  onSuccess,
+  accounts,
+  onClose,
+  onContributionSaved,
 }: GoalContributionDialogProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors },
@@ -44,52 +62,72 @@ export default function GoalContributionDialog({
   } = useForm<ContributionFormData>({
     resolver: zodResolver(contributionSchema),
     defaultValues: {
-      amount: 0,
+      amount: undefined,
       description: '',
-      date: format(new Date(), 'yyyy-MM-dd'),
+      date: new Date(),
+      accountId: '',
     },
   });
-
+  
   React.useEffect(() => {
-    if (open) {
-      reset({
-        amount: 0,
-        description: '',
-        date: format(new Date(), 'yyyy-MM-dd'),
-      });
-    }
-  }, [open, reset]);
+    reset({
+      amount: undefined,
+      description: '',
+      date: new Date(),
+      accountId: '',
+    });
+  }, [goal, reset]);
 
   const onSubmit = async (data: ContributionFormData) => {
     setIsSubmitting(true);
+    const toastId = toast.loading('Adding contribution...');
+    
     try {
-      const response = await fetch(`/api/goals/${goal.goalId}/contributions`, {
+      // Step 1: Create the transaction
+      const transactionResponse = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: data.amount,
-          date: data.date,
-          notes: data.description,
+          accountId: data.accountId,
+          amount: -data.amount, // Contribution is a withdrawal from the account
+          type: 'expense',
+          date: format(data.date, 'yyyy-MM-dd'),
+          notes: `Contribution to goal: ${goal.name}`,
+          description: data.description,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to add contribution');
+      if (!transactionResponse.ok) {
+        throw new Error('Failed to create transaction for the contribution.');
       }
+      
+      const newTransaction = await transactionResponse.json();
 
-      // Fetch updated goal after contribution
-      const goalResponse = await fetch(`/api/goals/${goal.goalId}`);
+      // Step 2: Add contribution to the goal
+      const contributionPayload = {
+        amount: data.amount,
+        date: format(data.date, 'yyyy-MM-dd'),
+        notes: data.description,
+        transactionId: newTransaction.transactionId,
+      };
+
+      const goalResponse = await fetch(`/api/goals/${goal.goalId}/contributions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contributionPayload),
+      });
+
       if (!goalResponse.ok) {
-        throw new Error('Failed to fetch updated goal');
+        // Here you might want to delete the created transaction to avoid inconsistency
+        throw new Error('Failed to add contribution to the goal.');
       }
 
       const updatedGoal = await goalResponse.json();
-      onSuccess(updatedGoal);
-      toast.success('Contribution added successfully');
-      onOpenChange(false);
+      onContributionSaved(updatedGoal);
+      toast.success('Contribution added successfully', { id: toastId });
+      onClose();
     } catch (error) {
-      console.error('Error adding contribution:', error);
-      toast.error('Failed to add contribution');
+      toast.error((error as Error).message, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
@@ -98,7 +136,7 @@ export default function GoalContributionDialog({
   const remainingAmount = goal.targetAmount - goal.currentAmount;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={true} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Add Contribution to {goal.name}</DialogTitle>
@@ -129,57 +167,92 @@ export default function GoalContributionDialog({
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="amount">Contribution Amount</Label>
+            <Label htmlFor="amount">Amount</Label>
             <Input
               id="amount"
               type="number"
               step="0.01"
               {...register('amount', { valueAsNumber: true })}
-              placeholder="0.00"
+              placeholder="50.00"
               disabled={isSubmitting}
             />
-            {errors.amount && (
-              <p className="text-sm text-destructive mt-1">{errors.amount.message}</p>
-            )}
+            {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="date">Contribution Date</Label>
-            <Input
-              id="date"
-              type="date"
-              {...register('date')}
-              disabled={isSubmitting}
+            <Label htmlFor="accountId">Source Account</Label>
+            <Controller
+              name="accountId"
+              control={control}
+              render={({ field }) => (
+                <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((acc) => (
+                      <SelectItem key={acc.accountId} value={acc.accountId}>{acc.name} ({acc.type})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             />
-            {errors.date && (
-              <p className="text-sm text-destructive mt-1">{errors.date.message}</p>
-            )}
+            {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
           </div>
-
+          
+          <div className="space-y-2">
+            <Label htmlFor="date">Date</Label>
+            <Controller
+              control={control}
+              name="date"
+              render={({ field }) => (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={'outline'}
+                      className={cn(
+                        'w-full justify-start text-left font-normal',
+                        !field.value && 'text-muted-foreground'
+                      )}
+                      disabled={isSubmitting}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+            />
+            {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
+          </div>
+          
           <div className="space-y-2">
             <Label htmlFor="description">Description (Optional)</Label>
             <Textarea
               id="description"
               {...register('description')}
-              placeholder="e.g., Monthly savings, bonus contribution"
+              placeholder="e.g., Monthly contribution"
               disabled={isSubmitting}
               rows={2}
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Contribution'}
+              {isSubmitting ? 'Saving...' : 'Add Contribution'}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

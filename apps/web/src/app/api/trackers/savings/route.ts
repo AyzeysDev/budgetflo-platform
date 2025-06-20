@@ -106,19 +106,19 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const trackerId = searchParams.get('id');
+
+    if (!trackerId) {
+      return NextResponse.json({ error: 'Tracker ID is required for deletion' }, { status: 400 });
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { trackerId } = body;
-    
-    if (!trackerId) {
-      return NextResponse.json({ error: 'Tracker ID is required for deletion' }, { status: 400 });
-    }
-
-    const url = `${API_BASE_URL}/api/users/${session.user.id}/trackers/savings/${trackerId}`;
+    const url = `${API_BASE_URL}/api/trackers/savings/${trackerId}`;
 
     const response = await fetch(url, {
       method: 'DELETE',
@@ -128,13 +128,17 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      return NextResponse.json(error, { status: response.status });
+      try {
+        const error = await response.json();
+        return NextResponse.json(error, { status: response.status });
+      } catch {
+        return NextResponse.json({ error: 'An unexpected error occurred on the backend.' }, { status: response.status });
+      }
     }
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error('Error deleting savings tracker:', error);
+    console.error('Error in proxy delete savings tracker:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

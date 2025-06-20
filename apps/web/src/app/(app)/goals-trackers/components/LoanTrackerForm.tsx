@@ -9,18 +9,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { WebAppLoanTracker, WebAppCreateLoanTrackerPayload, WebAppUpdateLoanTrackerPayload } from '@/types/tracker';
 import type { WebAppAccount } from '@/types/account';
+import { cn } from '@/lib/utils';
+import { Controller } from 'react-hook-form';
 
 const loanTrackerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   totalAmount: z.number().min(0.01, 'Total amount must be greater than 0'),
-  interestRate: z.number().min(0, 'Interest rate must be 0 or greater').max(100, 'Interest rate cannot exceed 100%'),
+  interestRate: z.number().min(0, 'Interest rate cannot be negative'),
   tenureMonths: z.number().min(1, 'Tenure must be at least 1 month'),
-  startDate: z.string().min(1, 'Start date is required'),
+  startDate: z.date({ required_error: 'Start date is required' }),
   emiAmount: z.number().min(0.01, 'EMI amount must be greater than 0'),
   linkedAccountId: z.string().optional(),
 });
@@ -28,25 +36,25 @@ const loanTrackerSchema = z.object({
 type LoanTrackerFormData = z.infer<typeof loanTrackerSchema>;
 
 interface LoanTrackerFormProps {
-  open: boolean;
+  isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  tracker: WebAppLoanTracker | null;
-  accounts: WebAppAccount[];
   onSave: (tracker: WebAppLoanTracker) => void;
+  editingTracker: WebAppLoanTracker | null;
+  accounts: WebAppAccount[];
 }
 
 export default function LoanTrackerForm({
-  open,
+  isOpen,
   onOpenChange,
-  tracker,
-  accounts,
   onSave,
+  editingTracker,
+  accounts,
 }: LoanTrackerFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Debug accounts data
   React.useEffect(() => {
-    if (open) {
+    if (isOpen) {
       console.log('LoanTrackerForm - All accounts:', accounts);
       console.log('LoanTrackerForm - Accounts length:', accounts?.length || 0);
       console.log('LoanTrackerForm - Sample account:', accounts?.[0]);
@@ -54,9 +62,10 @@ export default function LoanTrackerForm({
       console.log('LoanTrackerForm - Filtered accounts:', filtered);
       console.log('LoanTrackerForm - Filtered length:', filtered.length);
     }
-  }, [open, accounts]);
+  }, [isOpen, accounts]);
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors },
@@ -65,15 +74,6 @@ export default function LoanTrackerForm({
     watch,
   } = useForm<LoanTrackerFormData>({
     resolver: zodResolver(loanTrackerSchema),
-    defaultValues: {
-      name: '',
-      totalAmount: 0,
-      interestRate: 0,
-      tenureMonths: 12,
-      startDate: format(new Date(), 'yyyy-MM-dd'),
-      emiAmount: 0,
-      linkedAccountId: 'none',
-    },
   });
 
   // Filter liability accounts for loans - HARDCODED ROBUST FILTERING
@@ -99,15 +99,15 @@ export default function LoanTrackerForm({
   }, [accounts]);
 
   React.useEffect(() => {
-    if (tracker) {
+    if (editingTracker) {
       reset({
-        name: tracker.name,
-        totalAmount: tracker.totalAmount,
-        interestRate: tracker.interestRate,
-        tenureMonths: tracker.tenureMonths,
-        startDate: format(new Date(tracker.startDate), 'yyyy-MM-dd'),
-        emiAmount: tracker.emiAmount,
-        linkedAccountId: tracker.linkedAccountId || 'none',
+        name: editingTracker.name,
+        totalAmount: editingTracker.totalAmount,
+        interestRate: editingTracker.interestRate,
+        tenureMonths: editingTracker.tenureMonths,
+        startDate: new Date(editingTracker.startDate),
+        emiAmount: editingTracker.emiAmount,
+        linkedAccountId: editingTracker.linkedAccountId || 'none',
       });
     } else {
       reset({
@@ -115,12 +115,12 @@ export default function LoanTrackerForm({
         totalAmount: 0,
         interestRate: 0,
         tenureMonths: 12,
-        startDate: format(new Date(), 'yyyy-MM-dd'),
+        startDate: new Date(),
         emiAmount: 0,
         linkedAccountId: 'none',
       });
     }
-  }, [tracker, reset]);
+  }, [editingTracker, reset]);
 
   // Calculate EMI when loan details change
   const totalAmount = watch('totalAmount');
@@ -146,13 +146,14 @@ export default function LoanTrackerForm({
   const onSubmit = async (data: LoanTrackerFormData) => {
     setIsSubmitting(true);
     try {
-      const url = tracker ? `/api/trackers/loans` : '/api/trackers/loans';
-      const method = tracker ? 'PUT' : 'POST';
+      const url = editingTracker ? `/api/trackers/loans` : '/api/trackers/loans';
+      const method = editingTracker ? 'PUT' : 'POST';
       
       const payload: WebAppCreateLoanTrackerPayload | WebAppUpdateLoanTrackerPayload = {
         ...data,
         linkedAccountId: data.linkedAccountId === 'none' ? null : data.linkedAccountId,
-        ...(tracker && { trackerId: tracker.trackerId }),
+        ...(editingTracker && { trackerId: editingTracker.trackerId }),
+        startDate: format(data.startDate, 'yyyy-MM-dd'),
       };
 
       const response = await fetch(url, {
@@ -167,7 +168,7 @@ export default function LoanTrackerForm({
 
       const savedTracker = await response.json();
       onSave(savedTracker);
-      toast.success(tracker ? 'Loan tracker updated successfully' : 'Loan tracker created successfully');
+      toast.success(editingTracker ? 'Loan tracker updated successfully' : 'Loan tracker created successfully');
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving loan tracker:', error);
@@ -178,10 +179,10 @@ export default function LoanTrackerForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{tracker ? 'Edit Loan Tracker' : 'Create New Loan Tracker'}</DialogTitle>
+          <DialogTitle>{editingTracker ? 'Edit Loan Tracker' : 'Create New Loan Tracker'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="space-y-2">
@@ -245,16 +246,28 @@ export default function LoanTrackerForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input
-                id="startDate"
-                type="date"
-                {...register('startDate')}
-                disabled={isSubmitting}
+              <Label>Start Date</Label>
+              <Controller
+                name="startDate"
+                control={control}
+                render={({ field }) => (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                )}
               />
-              {errors.startDate && (
-                <p className="text-sm text-destructive mt-1">{errors.startDate.message}</p>
-              )}
+              {errors.startDate && <p className="text-sm text-destructive">{errors.startDate.message}</p>}
             </div>
           </div>
 
@@ -338,7 +351,7 @@ export default function LoanTrackerForm({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : tracker ? 'Update' : 'Create'}
+              {isSubmitting ? 'Saving...' : editingTracker ? 'Update' : 'Create'}
             </Button>
           </div>
         </form>
