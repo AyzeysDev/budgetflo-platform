@@ -153,9 +153,18 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Invalid Category ID parameter." }, { status: 400 });
   }
 
+  let payload;
+  try {
+    payload = await req.json();
+  } catch (error) {
+    console.error(`[BFF DELETE /api/categories/${categoryId}] Invalid or empty JSON in request body:`, error);
+    // Default to simple delete if body is missing for backward compatibility or other callers
+    payload = { action: 'delete' }; 
+  }
+
   try {
     const targetUrl = `${expressApiUrl}/users/${userId}/categories/${categoryId}`;
-    console.log(`[BFF DELETE /api/categories/${categoryId}] Forwarding to: ${targetUrl}`);
+    console.log(`[BFF DELETE /api/categories/${categoryId}] Forwarding to: ${targetUrl} with payload:`, payload);
 
     const response = await fetch(targetUrl, {
       method: 'DELETE',
@@ -163,6 +172,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
         'Content-Type': 'application/json',
         'X-Authenticated-User-Id': userId,
       },
+      body: JSON.stringify(payload),
     });
 
     if (response.status === 204) {

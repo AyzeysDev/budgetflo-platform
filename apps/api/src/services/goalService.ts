@@ -6,7 +6,6 @@ import {
   GoalContributionDTO,
   CreateGoalPayload,
   UpdateGoalPayload,
-  CreateGoalContributionPayload,
 } from '../models/goal.model';
 import { Timestamp, FieldValue, CollectionReference } from 'firebase-admin/firestore';
 
@@ -16,17 +15,19 @@ if (!firebaseInitialized) {
 
 // Get typed collection references
 function getGoalsCollection(): CollectionReference<Goal> {
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
-  return firestore.collection('goals') as CollectionReference<Goal>;
+  return firestoreInstance.collection('goals') as CollectionReference<Goal>;
 }
 
 function getGoalContributionsCollection(): CollectionReference<GoalContribution> {
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
-  return firestore.collection('goal_contributions') as CollectionReference<GoalContribution>;
+  return firestoreInstance.collection('goal_contributions') as CollectionReference<GoalContribution>;
 }
 
 // Convert Goal to DTO
@@ -64,6 +65,71 @@ function determineGoalStatus(targetDate: Date, currentAmount: number, targetAmou
     return 'overdue';
   }
   return 'in_progress';
+}
+
+/**
+ * [INTERNAL] Calculates and applies a progress update to a goal within a Firestore transaction.
+ * This function ONLY performs writes and should be given pre-fetched data.
+ * @param t - The Firestore transaction object.
+ * @param goalDoc - The Firestore document snapshot of the goal to update.
+ * @param amountChange - The amount to add (positive) or subtract (negative).
+ */
+export function _applyGoalUpdate(t: FirebaseFirestore.Transaction, goalDoc: FirebaseFirestore.DocumentSnapshot, amountChange: number): void {
+    if (!goalDoc.exists) {
+        console.warn(`Goal with ID ${goalDoc.id} not found during transaction write phase. Skipping update.`);
+        return;
+    }
+
+    const goal = goalDoc.data() as Goal;
+    const newCurrentAmount = goal.currentAmount + amountChange;
+    const finalAmount = Math.max(0, newCurrentAmount);
+
+    const newStatus = determineGoalStatus(
+        (goal.targetDate as Timestamp).toDate(),
+        finalAmount,
+        goal.targetAmount
+    );
+
+    t.update(goalDoc.ref, {
+        currentAmount: finalAmount,
+        status: newStatus,
+        updatedAt: FieldValue.serverTimestamp(),
+    });
+}
+
+/**
+ * [INTERNAL] Updates the progress of a goal within a Firestore transaction.
+ * Should only be called by other services (like transactionService).
+ * @param t - The Firestore transaction object.
+ * @param goalId - The ID of the goal to update.
+ * @param amountChange - The amount to add (positive) or subtract (negative).
+ */
+export async function _updateGoalProgress(t: FirebaseFirestore.Transaction, goalId: string, amountChange: number): Promise<void> {
+    const goalRef = getGoalsCollection().doc(goalId);
+    const goalDoc = await t.get(goalRef);
+
+    if (!goalDoc.exists) {
+        console.warn(`Goal with ID ${goalId} not found during transaction. Skipping progress update.`);
+        return; // Fail silently within a transaction to avoid halting unrelated operations.
+    }
+
+    const goal = goalDoc.data() as Goal;
+    const newCurrentAmount = goal.currentAmount + amountChange;
+    
+    // Ensure currentAmount doesn't go below zero
+    const finalAmount = Math.max(0, newCurrentAmount);
+
+    const newStatus = determineGoalStatus(
+        (goal.targetDate as Timestamp).toDate(),
+        finalAmount,
+        goal.targetAmount
+    );
+
+    t.update(goalRef, {
+        currentAmount: finalAmount,
+        status: newStatus,
+        updatedAt: FieldValue.serverTimestamp(),
+    });
 }
 
 // Create a new goal
@@ -186,11 +252,12 @@ export async function deleteGoal(goalId: string, userId: string): Promise<boolea
     .where('goalId', '==', goalId)
     .get();
 
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
 
-  const batch = firestore.batch();
+  const batch = firestoreInstance.batch();
   
   contributionsSnapshot.docs.forEach(doc => {
     batch.delete(doc.ref);
@@ -200,67 +267,6 @@ export async function deleteGoal(goalId: string, userId: string): Promise<boolea
   await batch.commit();
 
   return true;
-}
-
-// Add a contribution to a goal
-export async function addGoalContribution(
-  goalId: string,
-  userId: string,
-  payload: CreateGoalContributionPayload
-): Promise<GoalContributionDTO> {
-  const goalRef = getGoalsCollection().doc(goalId);
-  const contributionsCollection = getGoalContributionsCollection();
-
-  if (!firestore) {
-    throw new Error("Firestore is not initialized");
-  }
-
-  const contributionData = await firestore.runTransaction(async (transaction) => {
-    const goalDoc = await transaction.get(goalRef);
-    
-    if (!goalDoc.exists) {
-      throw new Error('Goal not found');
-    }
-
-    const goal = goalDoc.data() as Goal;
-    
-    if (goal.userId !== userId) {
-      throw new Error('Unauthorized access to goal');
-    }
-
-    // Create contribution
-    const contributionRef = contributionsCollection.doc();
-    const contribution: GoalContribution = {
-      contributionId: contributionRef.id,
-      goalId,
-      userId,
-      amount: payload.amount,
-      date: payload.date ? Timestamp.fromDate(new Date(payload.date)) : Timestamp.now(),
-      source: payload.transactionId ? 'transaction' : 'manual',
-      transactionId: payload.transactionId || null,
-      notes: payload.notes || null,
-      createdAt: FieldValue.serverTimestamp() as Timestamp,
-    };
-
-    transaction.set(contributionRef, contribution);
-
-    // Update goal current amount and status
-    const newCurrentAmount = goal.currentAmount + payload.amount;
-    const targetDate = (goal.targetDate as Timestamp).toDate();
-    const newStatus = determineGoalStatus(targetDate, newCurrentAmount, goal.targetAmount);
-
-    transaction.update(goalRef, {
-      currentAmount: newCurrentAmount,
-      status: newStatus,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    return { contribution, contributionRef };
-  });
-
-  // Get the created contribution
-  const contributionDoc = await contributionData.contributionRef.get();
-  return convertContributionToDTO(contributionDoc.data() as GoalContribution);
 }
 
 // Get contributions for a goal
@@ -283,18 +289,22 @@ export async function getGoalContributions(goalId: string, userId: string): Prom
   return snapshot.docs.map(doc => convertContributionToDTO(doc.data()));
 }
 
-// Link a transaction to a goal (called from transaction service)
-export async function linkTransactionToGoal(
-  transactionId: string,
-  goalId: string,
-  amount: number,
-  date: Date,
-  userId: string
-): Promise<void> {
-  await addGoalContribution(goalId, userId, {
-    amount,
-    date: date.toISOString(),
-    transactionId,
-    notes: 'Linked from transaction',
-  });
-} 
+/*
+ * [DEPRECATED] This function is no longer needed. Linking is handled
+ * by creating a transaction with a linkedGoalId via transactionService.
+ */
+// // Link a transaction to a goal (called from transaction service)
+// export async function linkTransactionToGoal(
+//   transactionId: string,
+//   goalId: string,
+//   amount: number,
+//   date: Date,
+//   userId: string
+// ): Promise<void> {
+//   await addGoalContribution(goalId, userId, {
+//     amount,
+//     date: date.toISOString(),
+//     transactionId,
+//     notes: 'Linked from transaction',
+//   });
+// } 

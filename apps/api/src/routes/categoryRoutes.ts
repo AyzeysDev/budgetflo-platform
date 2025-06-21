@@ -23,6 +23,12 @@ const updateCategoryValidationRules = [
   body('includeInBudget').optional().isBoolean().withMessage('includeInBudget must be a boolean value.'), // Add this validation
 ];
 
+const deleteCategoryValidationRules = [
+    param('categoryId').isString().notEmpty().withMessage('Category ID is required in path.'),
+    body('action').isIn(['delete', 'transfer']).withMessage('Invalid action specified.'),
+    body('targetCategoryId').if(body('action').equals('transfer')).isString().notEmpty().withMessage('Target category ID is required for transfer action.'),
+];
+
 const categoryIdValidationRule = [
     param('categoryId').isString().notEmpty().withMessage('Category ID is required in path.')
 ];
@@ -126,7 +132,7 @@ router.put(
 
 router.delete(
   '/:categoryId', 
-  categoryIdValidationRule,
+  deleteCategoryValidationRules,
   asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -136,17 +142,25 @@ router.delete(
 
     const userId = req.params.userId;
     const { categoryId } = req.params;
+    const { action, targetCategoryId } = req.body;
+    
      if (!userId) {
         res.status(400).json({ error: "User ID is missing from the route parameters." });
         return;
     }
 
-    const success = await categoryService.deleteCategory(categoryId, userId);
+    const success = await categoryService.deleteCategoryAndHandleTransactions({
+      userId,
+      categoryIdToDelete: categoryId,
+      action,
+      targetCategoryId,
+    });
+    
     if (!success) {
       res.status(404).json({ error: 'Category not found or failed to delete.' });
       return;
     }
-    res.status(200).json({ message: 'Category deleted successfully.' });
+    res.status(204).send();
   })
 );
 

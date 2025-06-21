@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Tags, AlertTriangleIcon, Filter } from 'lucide-react';
+import { PlusCircle, Tags, AlertTriangleIcon, Filter, Trash2, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +22,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import type { CategoryDTO } from '@/../../api/src/models/budget.model';
 import CategoryForm from './CategoryForm';
 import { DataTable } from './data-table';
 import { columns } from './columns';
+import { cn } from '@/lib/utils';
 
 interface CategoryClientPageProps {
   initialCategories: CategoryDTO[];
@@ -38,6 +46,8 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
   const [editingCategory, setEditingCategory] = useState<CategoryDTO | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<CategoryDTO | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [deleteAction, setDeleteAction] = useState<'delete' | 'transfer'>('delete');
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     setCategories([...initialCategories].sort((a, b) => a.name.localeCompare(b.name)));
@@ -52,26 +62,50 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
     setEditingCategory(category);
     setIsFormModalOpen(true);
   };
+  
+  const handleOpenDeleteModal = (category: CategoryDTO) => {
+    setDeleteAction('delete');
+    setTransferTargetId(null);
+    setCategoryToDelete(category);
+  }
 
   const handleDeleteCategory = async () => {
     if (!categoryToDelete) return;
     
+    if (deleteAction === 'transfer' && !transferTargetId) {
+      toast.error("Please select a category to transfer transactions to.");
+      return;
+    }
+    
     const toastId = `delete-${categoryToDelete.id}`;
     toast.loading(`Deleting category: ${categoryToDelete.name}...`, { id: toastId });
+    
+    const payload = {
+        action: deleteAction,
+        targetCategoryId: deleteAction === 'transfer' ? transferTargetId : undefined,
+    };
+
     try {
-      const response = await fetch(`/api/categories/${categoryToDelete.id}`, { method: 'DELETE' }); 
+      const response = await fetch(`/api/categories/${categoryToDelete.id}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }); 
+
       if (!response.ok) {
         if (response.status !== 204) {
             const errorData = await response.json().catch(() => ({ error: "Failed to delete category" }));
             throw new Error(errorData.error || "Operation failed");
         }
       }
-      toast.success(`Category "${categoryToDelete.name}" deleted.`, { id: toastId });
+
+      toast.success(`Category "${categoryToDelete.name}" handled successfully.`, { id: toastId });
       setCategories(prev => prev.filter(cat => cat.id !== categoryToDelete.id));
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
     } finally {
       setCategoryToDelete(null);
+      setTransferTargetId(null);
     }
   };
 
@@ -93,10 +127,16 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
     return categories.filter(category => category.type === filterType);
   }, [categories, filterType]);
 
-  const tableColumns = useMemo(() => columns(handleEditCategory, setCategoryToDelete), []);
+  const tableColumns = useMemo(() => columns(handleEditCategory, handleOpenDeleteModal), []);
 
   const incomeCount = useMemo(() => categories.filter(cat => cat.type === 'income').length, [categories]);
   const expenseCount = useMemo(() => categories.filter(cat => cat.type === 'expense').length, [categories]);
+
+  const transferCandidateCategories = useMemo(() => {
+    if (!categoryToDelete) return [];
+    return categories.filter(c => c.type === categoryToDelete.type && c.id !== categoryToDelete.id);
+  }, [categoryToDelete, categories]);
+
 
   return (
     <>
@@ -176,30 +216,75 @@ export default function CategoryClientPage({ initialCategories }: CategoryClient
       {/* Delete Confirmation Modal */}
       {categoryToDelete && (
         <Dialog open={!!categoryToDelete} onOpenChange={() => setCategoryToDelete(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-destructive/10 flex items-center justify-center">
-                <AlertTriangleIcon className="h-6 w-6 text-destructive"/>
-              </div>
-              <DialogTitle className="text-lg font-semibold text-center">Delete Category</DialogTitle>
-              <DialogDescription className="text-center">
-                Are you sure you want to delete <span className="font-medium">&quot;{categoryToDelete.name}&quot;</span>? This action cannot be undone.
-              </DialogDescription>
+                <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <AlertTriangleIcon className="h-7 w-7 text-destructive"/>
+                </div>
+                <DialogTitle className="text-xl font-bold text-center">Delete Category &quot;{categoryToDelete.name}&quot;</DialogTitle>
+                <DialogDescription className="text-center pt-1">
+                    This category has transactions linked to it. How should we handle them?
+                </DialogDescription>
             </DialogHeader>
+
+            <div className="py-4 space-y-3">
+                <button onClick={() => setDeleteAction('delete')} className={cn("w-full p-4 border rounded-lg text-left transition-all", deleteAction === 'delete' ? 'border-destructive bg-destructive/5' : 'border-border hover:bg-muted/50')}>
+                    <div className="flex items-start gap-3">
+                        <Trash2 className="h-5 w-5 mt-0.5 text-destructive" />
+                        <div>
+                            <p className="font-semibold">Delete all transactions</p>
+                            <p className="text-sm text-muted-foreground">Permanently remove this category and all of its associated transactions from your records.</p>
+                        </div>
+                    </div>
+                </button>
+                <button 
+                  onClick={() => setDeleteAction('transfer')} 
+                  disabled={transferCandidateCategories.length === 0}
+                  className={cn(
+                    "w-full p-4 border rounded-lg text-left transition-all", 
+                    deleteAction === 'transfer' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
+                    transferCandidateCategories.length === 0 && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                    <div className="flex items-start gap-3">
+                        <ArrowRightLeft className="h-5 w-5 mt-0.5 text-primary" />
+                        <div>
+                            <p className="font-semibold">Transfer transactions</p>
+                            <p className="text-sm text-muted-foreground">Move all associated transactions to another category.</p>
+                        </div>
+                    </div>
+                </button>
+
+                {deleteAction === 'transfer' && (
+                  <div className="pl-12 pt-2">
+                    {transferCandidateCategories.length > 0 ? (
+                      <Select onValueChange={setTransferTargetId} value={transferTargetId || undefined}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a new category..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {transferCandidateCategories.map(cat => (
+                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-xs text-destructive-foreground bg-destructive/80 p-2 rounded-md">
+                        No other '{categoryToDelete.type}' categories available to transfer to.
+                      </p>
+                    )}
+                  </div>
+                )}
+            </div>
+            
             <DialogFooter className="gap-2 sm:gap-3">
-              <Button 
-                variant="outline" 
-                onClick={() => setCategoryToDelete(null)}
-                className="h-9 px-4 text-sm"
-              >
-                Cancel
-              </Button>
+              <Button variant="outline" onClick={() => setCategoryToDelete(null)}>Cancel</Button>
               <Button 
                 variant="destructive" 
                 onClick={handleDeleteCategory}
-                className="h-9 px-4 text-sm"
+                disabled={(deleteAction === 'transfer' && !transferTargetId)}
               >
-                Delete Category
+                Confirm Action
               </Button>
             </DialogFooter>
           </DialogContent>

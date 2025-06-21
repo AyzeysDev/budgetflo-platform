@@ -8,7 +8,7 @@ import {
   UpdateLoanTrackerPayload,
   CreateSavingsTrackerPayload,
   UpdateSavingsTrackerPayload,
-  RecordEMIPaymentPayload,
+  // RecordEMIPaymentPayload, // Deprecated
 } from '../models/tracker.model';
 import { Account } from '../models/account.model';
 import { Timestamp, FieldValue, CollectionReference } from 'firebase-admin/firestore';
@@ -19,24 +19,92 @@ if (!firebaseInitialized) {
 
 // Get typed collection references
 function getLoanTrackersCollection(): CollectionReference<LoanTracker> {
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
-  return firestore.collection('loan_trackers') as CollectionReference<LoanTracker>;
+  return firestoreInstance.collection('loan_trackers') as CollectionReference<LoanTracker>;
 }
 
 function getSavingsTrackersCollection(): CollectionReference<SavingsTracker> {
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
-  return firestore.collection('savings_trackers') as CollectionReference<SavingsTracker>;
+  return firestoreInstance.collection('savings_trackers') as CollectionReference<SavingsTracker>;
 }
 
 function getAccountsCollection(): CollectionReference<Account> {
-  if (!firestore) {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
     throw new Error("Firestore is not initialized");
   }
-  return firestore.collection('accounts') as CollectionReference<Account>;
+  return firestoreInstance.collection('accounts') as CollectionReference<Account>;
+}
+
+/**
+ * [INTERNAL] Updates the progress of a loan tracker within a Firestore transaction.
+ * Should only be called by transactionService.
+ * @param t - The Firestore transaction object.
+ * @param trackerId - The ID of the loan tracker to update.
+ * @param paymentAmount - The amount of the payment (positive for payment, negative for reversal).
+ */
+export async function _updateLoanProgress(t: FirebaseFirestore.Transaction, trackerId: string, paymentAmount: number): Promise<void> {
+    const trackerRef = getLoanTrackersCollection().doc(trackerId);
+    const trackerDoc = await t.get(trackerRef);
+
+    if (!trackerDoc.exists) {
+        console.warn(`Loan tracker with ID ${trackerId} not found during transaction. Skipping progress update.`);
+        return;
+    }
+
+    const tracker = trackerDoc.data() as LoanTracker;
+    const installmentsChange = paymentAmount > 0 ? 1 : -1;
+    const newPaidInstallments = tracker.paidInstallments + installmentsChange;
+    
+    const updateData: { [key: string]: any } = {
+        remainingBalance: FieldValue.increment(-paymentAmount),
+        paidInstallments: Math.max(0, newPaidInstallments),
+        updatedAt: FieldValue.serverTimestamp(),
+    };
+    
+    // If we're making a payment, advance the due date. If we're reversing one, pull it back.
+    if (tracker.nextDueDate) {
+        const currentDueDate = (tracker.nextDueDate as Timestamp).toDate();
+        const newDueDate = new Date(currentDueDate);
+        newDueDate.setMonth(newDueDate.getMonth() + installmentsChange);
+        updateData.nextDueDate = Timestamp.fromDate(newDueDate);
+    }
+
+    t.update(trackerRef, updateData);
+}
+
+/**
+ * [INTERNAL] Updates the progress of a savings tracker within a Firestore transaction.
+ * Currently, this only updates the timestamp as the balance is tied to the account.
+ * @param t - The Firestore transaction object.
+ * @param trackerId - The ID of the savings tracker to update.
+ * @param contributionAmount - The amount of the contribution (positive or negative).
+ */
+export async function _updateSavingsProgress(t: FirebaseFirestore.Transaction, trackerId: string, contributionAmount: number): Promise<void> {
+    const trackerRef = getSavingsTrackersCollection().doc(trackerId);
+    // We get the doc simply to ensure it exists before attempting an update.
+    const trackerDoc = await t.get(trackerRef);
+    if (!trackerDoc.exists) {
+        console.warn(`Savings tracker with ID ${trackerId} not found during transaction. Skipping progress update.`);
+        return;
+    }
+
+    // The core logic of balance change is handled by the transaction on the linked account.
+    // This function can be used for savings-specific logic, e.g., updating targets or statuses.
+    // For now, we just update the timestamp.
+    t.update(trackerRef, {
+        updatedAt: FieldValue.serverTimestamp(),
+        // Example for future use:
+        // currentBalance: FieldValue.increment(contributionAmount) 
+        // Note: This would denormalize the balance, which might be a valid choice later.
+        // For now, we rely on the account's balance as the source of truth.
+    });
 }
 
 // Calculate loan metrics
@@ -77,7 +145,6 @@ function convertLoanTrackerToDTO(tracker: LoanTracker): LoanTrackerDTO {
 // Convert SavingsTracker to DTO
 async function convertSavingsTrackerToDTO(tracker: SavingsTracker): Promise<SavingsTrackerDTO> {
   let currentBalance = 0;
-  let goalProgress = 0;
 
   // Get current balance from linked account
   if (tracker.linkedAccountId) {
@@ -86,13 +153,6 @@ async function convertSavingsTrackerToDTO(tracker: SavingsTracker): Promise<Savi
       const account = accountDoc.data() as Account;
       currentBalance = account.balance;
     }
-  }
-
-  // Calculate goal progress if linked to a goal
-  if (tracker.linkedGoalId) {
-    // This would need to import from goalService, but to avoid circular dependency,
-    // we'll let the frontend handle goal progress calculation
-    goalProgress = 0;
   }
 
   // Helper to safely convert a timestamp
@@ -108,7 +168,6 @@ async function convertSavingsTrackerToDTO(tracker: SavingsTracker): Promise<Savi
     createdAt: toISOString(tracker.createdAt),
     updatedAt: toISOString(tracker.updatedAt),
     currentBalance,
-    goalProgress,
   };
 }
 
@@ -206,65 +265,6 @@ export async function updateLoanTracker(
   return convertLoanTrackerToDTO(updatedData);
 }
 
-// Record an EMI payment
-export async function recordEMIPayment(
-  trackerId: string,
-  userId: string,
-  payload: RecordEMIPaymentPayload
-): Promise<LoanTrackerDTO> {
-  const trackerRef = getLoanTrackersCollection().doc(trackerId);
-  
-  if (!firestore) {
-    throw new Error("Firestore is not initialized");
-  }
-
-  return await firestore.runTransaction(async (transaction) => {
-    const trackerDoc = await transaction.get(trackerRef);
-    
-    if (!trackerDoc.exists) {
-      throw new Error('Loan tracker not found');
-    }
-
-    const tracker = trackerDoc.data() as LoanTracker;
-    
-    if (tracker.userId !== userId) {
-      throw new Error('Unauthorized access to loan tracker');
-    }
-
-    // Calculate new values
-    const newPaidInstallments = tracker.paidInstallments + 1;
-    const newRemainingBalance = Math.max(0, tracker.remainingBalance - (payload.amount - (tracker.emiAmount * tracker.interestRate / 100 / 12)));
-    
-    // Calculate next due date
-    const currentDueDate = (tracker.nextDueDate as Timestamp).toDate();
-    const newDueDate = new Date(currentDueDate);
-    newDueDate.setMonth(newDueDate.getMonth() + 1);
-
-    // Update tracker
-    transaction.update(trackerRef, {
-      paidInstallments: newPaidInstallments,
-      remainingBalance: newRemainingBalance,
-      nextDueDate: Timestamp.fromDate(newDueDate),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    // Update linked account balance if exists
-    if (tracker.linkedAccountId && payload.transactionId) {
-      const accountRef = getAccountsCollection().doc(tracker.linkedAccountId);
-      transaction.update(accountRef, {
-        balance: FieldValue.increment(-payload.amount),
-      });
-    }
-
-    const updatedTrackerDoc = await transaction.get(trackerRef);
-    const updatedData = updatedTrackerDoc.data();
-    if (!updatedData) {
-        throw new Error('Loan tracker not found after update');
-    }
-    return convertLoanTrackerToDTO(updatedData);
-  });
-}
-
 // Create a savings tracker
 export async function createSavingsTracker(userId: string, payload: CreateSavingsTrackerPayload): Promise<SavingsTrackerDTO> {
   const trackersCollection = getSavingsTrackersCollection();
@@ -286,7 +286,7 @@ export async function createSavingsTracker(userId: string, payload: CreateSaving
     userId,
     name: payload.name,
     linkedAccountId: payload.linkedAccountId,
-    linkedGoalId: payload.linkedGoalId || null,
+    currentBalance: account.balance,
     monthlyTarget: payload.monthlyTarget || null,
     overallTarget: payload.overallTarget || null,
     isActive: true,
@@ -389,4 +389,43 @@ export async function deleteSavingsTracker(trackerId: string, userId: string): P
 
   await trackerRef.delete();
   return true;
+}
+
+/**
+ * [INTERNAL] Calculates and applies a progress update to a loan tracker within a Firestore transaction.
+ * This function ONLY performs writes and should be given pre-fetched data.
+ */
+export function _applyLoanUpdate(t: FirebaseFirestore.Transaction, loanDoc: FirebaseFirestore.DocumentSnapshot, paymentAmount: number): void {
+    if (!loanDoc.exists) {
+        console.warn(`Loan tracker with ID ${loanDoc.id} not found during transaction write phase. Skipping update.`);
+        return;
+    }
+
+    const loan = loanDoc.data() as LoanTracker;
+    const newRemainingBalance = loan.remainingBalance - paymentAmount;
+    const newStatus = newRemainingBalance <= 0 ? 'completed' : 'in_progress';
+    const newPaidInstallments = loan.paidInstallments + 1; // Assuming one payment is one installment
+
+    t.update(loanDoc.ref, {
+        remainingBalance: Math.max(0, newRemainingBalance),
+        paidInstallments: newPaidInstallments,
+        status: newStatus,
+        updatedAt: FieldValue.serverTimestamp(),
+    });
+}
+
+/**
+ * [INTERNAL] Calculates and applies a progress update to a savings tracker within a Firestore transaction.
+ * This function ONLY performs writes and should be given pre-fetched data.
+ */
+export function _applySavingsUpdate(t: FirebaseFirestore.Transaction, savingsDoc: FirebaseFirestore.DocumentSnapshot): void {
+  // For savings trackers, a new linked transaction is all that's needed to update progress.
+  // We just update the timestamp.
+  if (!savingsDoc.exists) {
+    console.warn(`Savings tracker with ID ${savingsDoc.id} not found during transaction write phase. Skipping update.`);
+    return;
+  }
+  t.update(savingsDoc.ref, {
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 } 

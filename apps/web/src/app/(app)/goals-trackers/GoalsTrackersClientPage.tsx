@@ -91,8 +91,8 @@ export default function GoalsTrackersClientPage() {
     setIsLoanFormOpen(false);
   };
 
-  const handleLoanPaymentSaved = (tracker: WebAppLoanTracker) => {
-    handleMutation(mutateLoanTrackers, tracker, 'trackerId');
+  const handleLoanPaymentSaved = () => {
+    mutateLoanTrackers();
     setLoanToRecordPayment(null);
   };
 
@@ -138,8 +138,25 @@ export default function GoalsTrackersClientPage() {
       <GoalForm isOpen={isGoalFormOpen} onOpenChange={(open) => { setIsGoalFormOpen(open); if (!open) setEditingGoal(null); }} onSave={handleGoalSaved} editingGoal={editingGoal} categories={getCategoriesArray()} accounts={getAccountsArray()} />
       <LoanTrackerForm isOpen={isLoanFormOpen} onOpenChange={(open) => { setIsLoanFormOpen(open); if (!open) setEditingLoanTracker(null); }} onSave={handleLoanTrackerSaved} editingTracker={editingLoanTracker} accounts={getAccountsArray()} />
       <SavingsTrackerForm isOpen={isSavingsFormOpen} onOpenChange={(open) => { setIsSavingsFormOpen(open); if (!open) setEditingSavingsTracker(null); }} onSave={handleSavingsTrackerSaved} editingTracker={editingSavingsTracker} accounts={getAccountsArray()} />
-      {goalToContribute && (<GoalContributionDialog goal={goalToContribute} accounts={getAccountsArray()} onClose={() => setGoalToContribute(null)} onContributionSaved={(updatedGoal: WebAppGoal) => { handleMutation(mutateGoals, updatedGoal, 'goalId'); setGoalToContribute(null); }} /> )}
-      {loanToRecordPayment && (<LoanPaymentDialog tracker={loanToRecordPayment} onClose={() => setLoanToRecordPayment(null)} onPaymentSaved={handleLoanPaymentSaved} />)}
+      <GoalContributionDialog 
+        isOpen={!!goalToContribute}
+        goal={goalToContribute} 
+        accounts={getAccountsArray()} 
+        categories={getCategoriesArray()}
+        onClose={() => setGoalToContribute(null)} 
+        onContributionSaved={() => {
+          mutateGoals();
+          setGoalToContribute(null);
+        }} 
+      />
+      <LoanPaymentDialog 
+        isOpen={!!loanToRecordPayment}
+        tracker={loanToRecordPayment} 
+        accounts={getAccountsArray()}
+        categories={getCategoriesArray()}
+        onClose={() => setLoanToRecordPayment(null)} 
+        onPaymentSaved={handleLoanPaymentSaved} 
+      />
       <ProgressModal open={isProgressModalOpen} onOpenChange={setIsProgressModalOpen} tracker={progressTracker} />
       <AlertDialog open={!!goalToDelete} onOpenChange={(open) => !open && setGoalToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete your goal.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGoal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={!!loanTrackerToDelete} onOpenChange={(open) => !open && setLoanTrackerToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete your loan tracker.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLoanTracker}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>

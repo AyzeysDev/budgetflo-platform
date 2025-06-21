@@ -128,23 +128,17 @@ export const columns = (
       const type = row.original.type;
       const isIncome = type === 'income';
 
+      const formattedAmount = formatCurrency(amount);
+
       return (
         <div className={cn(
           "text-right font-medium",
-          isIncome ? "text-green-600 dark:text-green-500" : "text-foreground"
+          isIncome ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
         )}>
-          {isIncome ? `+${formatCurrency(amount)}` : formatCurrency(amount)}
+          {isIncome ? `+${formattedAmount}` : `-${formattedAmount}`}
         </div>
       );
     },
-  },
-  {
-    accessorKey: "notes",
-    header: "Notes",
-    cell: ({ row }) => {
-        const notes = row.getValue("notes") as string | null;
-        return <div className="text-sm text-muted-foreground truncate max-w-xs">{notes || '-'}</div>
-    }
   },
   {
     id: "actions",

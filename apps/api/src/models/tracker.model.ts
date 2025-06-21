@@ -25,7 +25,7 @@ export interface SavingsTracker {
   userId: string;
   name: string;
   linkedAccountId: string;
-  linkedGoalId: string | null;
+  currentBalance: number;
   monthlyTarget: number | null;
   overallTarget: number | null;
   isActive: boolean;
@@ -45,10 +45,9 @@ export interface LoanTrackerDTO extends Omit<LoanTracker, 'startDate' | 'nextDue
 }
 
 export interface SavingsTrackerDTO extends Omit<SavingsTracker, 'createdAt' | 'updatedAt'> {
+  currentBalance: number;
   createdAt: string;
   updatedAt: string;
-  currentBalance?: number;
-  goalProgress?: number;
 }
 
 // Payloads for API requests
@@ -74,14 +73,13 @@ export interface UpdateLoanTrackerPayload {
 export interface CreateSavingsTrackerPayload {
   name: string;
   linkedAccountId: string;
-  linkedGoalId?: string | null;
   monthlyTarget?: number | null;
   overallTarget?: number | null;
 }
 
 export interface UpdateSavingsTrackerPayload {
   name?: string;
-  linkedGoalId?: string | null;
+  linkedAccountId?: string;
   monthlyTarget?: number | null;
   overallTarget?: number | null;
   isActive?: boolean;

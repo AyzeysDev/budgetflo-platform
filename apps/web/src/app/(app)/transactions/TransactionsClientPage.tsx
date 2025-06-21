@@ -2,7 +2,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { ListOrdered, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ListOrdered, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Plus, Landmark, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -33,6 +34,7 @@ export default function TransactionsClientPage({
   accounts, 
   categories 
 }: TransactionsClientPageProps) {
+  const router = useRouter();
   const [transactions, setTransactions] = useState<WebAppTransaction[]>(initialTransactions);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<WebAppTransaction | null>(null);
@@ -40,6 +42,14 @@ export default function TransactionsClientPage({
   const [isLoading, setIsLoading] = useState(false);
   const [period, setPeriod] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const isInitialMount = useRef(true);
+  const [prereqModal, setPrereqModal] = useState({
+    open: false,
+    title: '',
+    description: '',
+    ctaLabel: '',
+    ctaHref: '',
+    icon: <></>
+  });
 
   // Re-fetch transactions
   const fetchTransactions = useCallback(async (year: number, month: number) => {
@@ -81,6 +91,34 @@ export default function TransactionsClientPage({
   };
 
   const handleAddClick = () => {
+    if (accounts.length === 0) {
+      setPrereqModal({
+        open: true,
+        title: "Create an Account First",
+        description: "You need at least one account before you can add a transaction. Accounts help you track where your money comes from and goes to.",
+        ctaLabel: "Go to Accounts",
+        ctaHref: "/accounts",
+        icon: <Landmark className="h-7 w-7 text-primary" />,
+      });
+      return;
+    }
+
+    const hasExpenseCategory = categories.some(c => c.type === 'expense');
+    const hasIncomeCategory = categories.some(c => c.type === 'income');
+
+    if (!hasExpenseCategory || !hasIncomeCategory) {
+      const missingType = !hasExpenseCategory ? 'expense' : 'income';
+      setPrereqModal({
+        open: true,
+        title: `Create an ${missingType.charAt(0).toUpperCase() + missingType.slice(1)} Category`,
+        description: `You need at least one ${missingType} category to add transactions. They help you organize your finances.`,
+        ctaLabel: "Go to Categories",
+        ctaHref: "/categories",
+        icon: <Tag className="h-7 w-7 text-primary" />,
+      });
+      return;
+    }
+
     setEditingTransaction(null);
     setIsFormOpen(true);
   };
@@ -111,6 +149,7 @@ export default function TransactionsClientPage({
 
   const onSaveSuccess = () => {
     fetchTransactions(period.year, period.month); // Refetch data after any save operation
+    setIsFormOpen(false); // Close the form modal
   };
   
   const transactionsWithDetails = useMemo((): TransactionWithDetails[] => {
@@ -180,8 +219,31 @@ export default function TransactionsClientPage({
         transactionToEdit={editingTransaction}
         accounts={accounts}
         categories={categories}
-        onSaveSuccess={onSaveSuccess}
+        onFormSubmitSuccess={onSaveSuccess}
       />
+
+      {prereqModal.open && (
+         <Dialog open={prereqModal.open} onOpenChange={(isOpen) => setPrereqModal(prev => ({ ...prev, open: isOpen }))}>
+            <DialogContent>
+              <DialogHeader>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                  {prereqModal.icon}
+                </div>
+                <DialogTitle className="text-center text-xl font-bold">{prereqModal.title}</DialogTitle>
+                <DialogDescription className="text-center">
+                  {prereqModal.description}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-center sm:space-x-2 gap-2 sm:gap-0 pt-4">
+                <Button variant="outline" onClick={() => setPrereqModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
+                <Button onClick={() => {
+                  router.push(prereqModal.ctaHref);
+                  setPrereqModal(prev => ({...prev, open: false}));
+                }}>{prereqModal.ctaLabel}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+      )}
 
       {transactionToDelete && (
         <Dialog open={!!transactionToDelete} onOpenChange={() => setTransactionToDelete(null)}>

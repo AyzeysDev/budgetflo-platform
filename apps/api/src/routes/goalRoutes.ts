@@ -6,8 +6,6 @@ import {
   getGoalById,
   updateGoal,
   deleteGoal,
-  addGoalContribution,
-  getGoalContributions,
 } from '../services/goalService';
 
 const router: Router = express.Router({ mergeParams: true });
@@ -153,46 +151,6 @@ router.delete(
     }
 
     res.status(204).send();
-  })
-);
-
-// POST /api/users/:userId/goals/:goalId/contributions - Add a contribution to a goal
-router.post(
-  '/:goalId/contributions',
-  [
-    param('goalId').notEmpty(),
-    body('amount').isFloat({ min: 0.01 }),
-    body('date').optional().isISO8601(),
-    body('notes').optional().trim(),
-    body('transactionId').optional(),
-  ],
-  handleValidationErrors,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.params.userId;
-    if (!userId) {
-      res.status(400).json({ error: 'User ID missing from route parameters.' });
-      return;
-    }
-
-    const contribution = await addGoalContribution(req.params.goalId, userId, req.body);
-    res.status(201).json(contribution);
-  })
-);
-
-// GET /api/users/:userId/goals/:goalId/contributions - Get contributions for a goal
-router.get(
-  '/:goalId/contributions',
-  [param('goalId').notEmpty()],
-  handleValidationErrors,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.params.userId;
-    if (!userId) {
-      res.status(400).json({ error: 'User ID missing from route parameters.' });
-      return;
-    }
-
-    const contributions = await getGoalContributions(req.params.goalId, userId);
-    res.json(contributions);
   })
 );
 

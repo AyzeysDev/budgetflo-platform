@@ -7,6 +7,7 @@ import {
   CategoryDTO
 } from '../models/budget.model';
 import { Timestamp, FieldValue, CollectionReference, Firestore } from 'firebase-admin/firestore';
+import { Transaction } from '../models/transaction.model';
 
 // Ensure Firebase is initialized before attempting to use Firestore services.
 if (!firebaseInitialized) {
@@ -24,56 +25,44 @@ const getCategoriesCollection = (): CollectionReference<Category> => {
   return firestore.collection('categories') as CollectionReference<Category>;
 };
 
+const getTransactionsCollection = (): CollectionReference<Transaction> => {
+  if (!firestore) {
+    throw new Error("Firestore is not initialized. Cannot access transactions collection.");
+  }
+  return firestore.collection('transactions') as CollectionReference<Transaction>;
+};
+
 /**
  * Converts Firestore Timestamps and ensures proper null handling for a category object.
  * @param categoryData The category data object from Firestore.
  * @returns A category DTO with timestamps converted to ISO strings.
  */
-// Update the convertCategoryToDTO function
-function convertCategoryToDTO(categoryData: Category | undefined): CategoryDTO | null {
-  if (!categoryData) return null;
-
+function convertCategoryToDTO(category: Category): CategoryDTO {
   return {
-    id: categoryData.id,
-    userId: categoryData.userId,
-    name: categoryData.name,
-    type: categoryData.type,
-    icon: categoryData.icon || null,
-    color: categoryData.color || null,
-    includeInBudget: categoryData.includeInBudget !== false, // Default to true if undefined
-    isSystemCategory: categoryData.isSystemCategory || false,
-    createdAt: categoryData.createdAt instanceof Timestamp ? categoryData.createdAt.toDate().toISOString() : String(categoryData.createdAt),
-    updatedAt: categoryData.updatedAt instanceof Timestamp ? categoryData.updatedAt.toDate().toISOString() : String(categoryData.updatedAt),
+    ...category,
+    icon: category.icon || null,
+    color: category.color || null,
+    includeInBudget: category.includeInBudget !== false,
+    isSystemCategory: category.isSystemCategory || false,
+    createdAt: (category.createdAt as Timestamp).toDate().toISOString(),
+    updatedAt: (category.updatedAt as Timestamp).toDate().toISOString(),
   };
 }
 
 // Update the createCategory function
-export async function createCategory(userId: string, payload: CreateCategoryPayload): Promise<CategoryDTO | null> {
-  const categoriesCollection = getCategoriesCollection();
-  const now = FieldValue.serverTimestamp() as Timestamp;
-  const newCategoryRef = categoriesCollection.doc();
-
-  const categoryData: Category = {
+export async function createCategory(userId: string, payload: CreateCategoryPayload): Promise<CategoryDTO> {
+  const newCategoryRef = getCategoriesCollection().doc();
+  const now = Timestamp.now();
+  const newCategory: Category = {
     id: newCategoryRef.id,
-    userId: userId,
-    name: payload.name,
-    type: payload.type,
-    icon: payload.icon || null,
-    color: payload.color || null,
-    includeInBudget: payload.includeInBudget, // Add this field
+    userId,
+    ...payload,
     createdAt: now,
     updatedAt: now,
     isSystemCategory: false,
   };
-
-  try {
-    await newCategoryRef.set(categoryData);
-    const docSnapshot = await newCategoryRef.get();
-    return convertCategoryToDTO(docSnapshot.data() as Category | undefined);
-  } catch (error) {
-    console.error("Error creating category in Firestore:", error);
-    throw new Error("Failed to create category due to a server error.");
-  }
+  await newCategoryRef.set(newCategory);
+  return convertCategoryToDTO(newCategory);
 }
 
 /**
@@ -81,58 +70,19 @@ export async function createCategory(userId: string, payload: CreateCategoryPayl
  * System categories are typically listed first or handled separately by the client if needed.
  */
 export async function getCategoriesByUserId(userId: string): Promise<CategoryDTO[]> {
-  const categoriesCollection = getCategoriesCollection();
-  try {
-    // Fetch all categories for the user
-    const snapshot = await categoriesCollection.where('userId', '==', userId).get();
-    
-    if (snapshot.empty) {
-      return [];
-    }
-
-    // Convert and sort in application code for flexibility
-    const userCategories = snapshot.docs
-      .map(doc => convertCategoryToDTO(doc.data() as Category | undefined))
-      .filter((cat): cat is CategoryDTO => cat !== null); // Type guard
-
-    // Sort: system categories first, then by name
-    userCategories.sort((a, b) => {
-      if (a.isSystemCategory && !b.isSystemCategory) return -1;
-      if (!a.isSystemCategory && b.isSystemCategory) return 1;
-      return a.name.localeCompare(b.name);
-    });
-      
-    return userCategories;
-  } catch (error) {
-    console.error(`Error fetching categories for user ${userId}:`, error);
-    throw new Error("Failed to fetch categories due to a server error.");
-  }
+  const snapshot = await getCategoriesCollection().where('userId', '==', userId).get();
+  if (snapshot.empty) return [];
+  return snapshot.docs.map(doc => convertCategoryToDTO(doc.data() as Category));
 }
 
 /**
  * Retrieves a specific category by its ID. Ensures the category belongs to the user.
  */
 export async function getCategoryById(categoryId: string, userId: string): Promise<CategoryDTO | null> {
-  const categoriesCollection = getCategoriesCollection();
-  try {
-    const docRef = categoriesCollection.doc(categoryId);
-    const doc = await docRef.get();
-
-    if (!doc.exists) {
-      return null;
-    }
-    const category = doc.data() as Category | undefined;
-    if (category?.userId !== userId) {
-      // This is an authorization issue, should ideally be caught by higher-level auth,
-      // but good to have a check here too.
-      console.warn(`Unauthorized attempt to access category ${categoryId} by user ${userId}.`);
-      return null; // Or throw specific auth error
-    }
-    return convertCategoryToDTO(category);
-  } catch (error) {
-    console.error(`Error fetching category ${categoryId}:`, error);
-    throw new Error("Failed to fetch category due to a server error.");
-  }
+  const doc = await getCategoriesCollection().doc(categoryId).get();
+  const data = doc.data();
+  if (!doc.exists || data?.userId !== userId) return null;
+  return convertCategoryToDTO(data as Category);
 }
 
 /**
@@ -140,65 +90,15 @@ export async function getCategoryById(categoryId: string, userId: string): Promi
  */
 // Update the updateCategory function
 export async function updateCategory(categoryId: string, userId: string, payload: UpdateCategoryPayload): Promise<CategoryDTO | null> {
-  const categoriesCollection = getCategoriesCollection();
-  const categoryRef = categoriesCollection.doc(categoryId);
-
-  try {
-    const doc = await categoryRef.get();
-    if (!doc.exists) {
-      return null;
-    }
-
-    const existingCategory = doc.data() as Category;
-    if (existingCategory.userId !== userId) {
-      throw new Error("Unauthorized: You do not have permission to update this category.");
-    }
-    if (existingCategory.isSystemCategory) {
-      throw new Error("System categories cannot be modified.");
-    }
-
-    const dataToUpdate: Partial<Record<keyof UpdateCategoryPayload, any>> & { updatedAt: Timestamp } = {
-      updatedAt: FieldValue.serverTimestamp() as Timestamp,
-    };
-
-    let hasChanges = false;
-    if (payload.name !== undefined && payload.name !== existingCategory.name) {
-      dataToUpdate.name = payload.name;
-      hasChanges = true;
-    }
-    if (payload.type !== undefined && payload.type !== existingCategory.type) {
-      dataToUpdate.type = payload.type;
-      hasChanges = true;
-    }
-    if (payload.icon !== undefined && payload.icon !== existingCategory.icon) {
-      dataToUpdate.icon = payload.icon === "" ? null : payload.icon;
-      hasChanges = true;
-    }
-    if (payload.color !== undefined && payload.color !== existingCategory.color) {
-      dataToUpdate.color = payload.color === "" ? null : payload.color;
-      hasChanges = true;
-    }
-    // Add includeInBudget field handling
-    if (payload.includeInBudget !== undefined && payload.includeInBudget !== existingCategory.includeInBudget) {
-      dataToUpdate.includeInBudget = payload.includeInBudget;
-      hasChanges = true;
-    }
-    
-    if (!hasChanges) {
-        console.log("No actual changes to update for category:", categoryId);
-        return convertCategoryToDTO(existingCategory);
-    }
-
-    await categoryRef.update(dataToUpdate);
-    const updatedDoc = await categoryRef.get();
-    return convertCategoryToDTO(updatedDoc.data() as Category | undefined);
-  } catch (error) {
-    console.error(`Error updating category ${categoryId}:`, error);
-    if (error instanceof Error && (error.message.includes("Unauthorized") || error.message.includes("System categories"))) {
-      throw error;
-    }
-    throw new Error("Failed to update category due to a server error.");
+  const categoryRef = getCategoriesCollection().doc(categoryId);
+  const doc = await categoryRef.get();
+  if (!doc.exists || doc.data()?.userId !== userId) {
+    return null;
   }
+  const updatePayload = { ...payload, updatedAt: Timestamp.now() };
+  await categoryRef.update(updatePayload);
+  const updatedDocData = (await categoryRef.get()).data();
+  return convertCategoryToDTO(updatedDocData as Category);
 }
 
 /**
@@ -238,3 +138,57 @@ export async function deleteCategory(categoryId: string, userId: string): Promis
  * Uses a batch write for efficiency.
  */
 // Update the seedDefaultCategoriesForUser function
+
+interface DeleteCategoryParams {
+    userId: string;
+    categoryIdToDelete: string;
+    action: 'delete' | 'transfer';
+    targetCategoryId?: string | null;
+}
+
+export async function deleteCategoryAndHandleTransactions({ userId, categoryIdToDelete, action, targetCategoryId }: DeleteCategoryParams): Promise<boolean> {
+    if (!firestore) throw new Error("Firestore is not initialized.");
+    const categories = getCategoriesCollection();
+    const transactions = getTransactionsCollection();
+
+    await firestore.runTransaction(async (t) => {
+        const categoryToDeleteRef = categories.doc(categoryIdToDelete);
+        const categoryToDeleteDoc = await t.get(categoryToDeleteRef);
+        const categoryData = categoryToDeleteDoc.data();
+
+        if (!categoryToDeleteDoc.exists || categoryData?.userId !== userId) {
+            throw new Error('Category not found or you do not have permission to delete it.');
+        }
+
+        if (action === 'transfer') {
+            if (!targetCategoryId) throw new Error('Target category ID is required for transfer.');
+            const targetCategoryRef = categories.doc(targetCategoryId);
+            const targetCategoryDoc = await t.get(targetCategoryRef);
+            const targetData = targetCategoryDoc.data();
+
+            if (!targetCategoryDoc.exists || targetData?.userId !== userId) {
+                throw new Error('Target category not found or unauthorized.');
+            }
+            if (targetData?.type !== categoryData?.type) {
+                throw new Error('Cannot transfer between categories of different types.');
+            }
+        }
+        
+        const transactionsQuery = transactions.where('categoryId', '==', categoryIdToDelete).where('userId', '==', userId);
+        const transactionsSnapshot = await t.get(transactionsQuery);
+        
+        if (!transactionsSnapshot.empty) {
+            for (const doc of transactionsSnapshot.docs) {
+                if (action === 'transfer') {
+                    t.update(doc.ref, { categoryId: targetCategoryId });
+                } else {
+                    t.delete(doc.ref);
+                }
+            }
+        }
+        
+        t.delete(categoryToDeleteRef);
+    });
+
+    return true;
+}

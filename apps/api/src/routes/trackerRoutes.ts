@@ -5,7 +5,6 @@ import {
   createLoanTracker,
   getLoanTrackersByUserId,
   updateLoanTracker,
-  recordEMIPayment,
   deleteLoanTracker,
   createSavingsTracker,
   getSavingsTrackersByUserId,
@@ -104,28 +103,6 @@ router.put(
       return;
     }
 
-    res.json(tracker);
-  })
-);
-
-// POST /api/users/:userId/trackers/loans/:trackerId/payments - Record EMI payment
-router.post(
-  '/loans/:trackerId/payments',
-  [
-    param('trackerId').notEmpty(),
-    body('amount').isFloat({ min: 0.01 }),
-    body('paymentDate').isISO8601(),
-    body('transactionId').optional(),
-  ],
-  handleValidationErrors,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.params.userId;
-    if (!userId) {
-      res.status(400).json({ error: 'User ID missing from route parameters.' });
-      return;
-    }
-
-    const tracker = await recordEMIPayment(req.params.trackerId, userId, req.body);
     res.json(tracker);
   })
 );

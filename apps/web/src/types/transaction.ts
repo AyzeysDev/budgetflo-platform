@@ -13,11 +13,18 @@ export interface WebAppTransaction {
   amount: number;
   type: 'income' | 'expense';
   accountId: string;
+  description: string;
   categoryId?: string | null;
   notes?: string | null;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   
+  // Linking fields
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'system_reconciliation';
+  linkedGoalId?: string | null;
+  linkedLoanTrackerId?: string | null;
+  linkedSavingsTrackerId?: string | null;
+
   // Enriched data for display purposes
   category?: WebAppCategory | null;
   account?: WebAppAccount | null;
@@ -31,8 +38,15 @@ export interface WebAppCreateTransactionPayload {
   amount: number;
   type: 'income' | 'expense';
   accountId: string;
+  description: string;
   categoryId?: string | null;
   notes?: string | null;
+  
+  // Linking fields
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution';
+  linkedGoalId?: string;
+  linkedLoanTrackerId?: string;
+  linkedSavingsTrackerId?: string;
 }
 
 /**
@@ -43,6 +57,13 @@ export interface WebAppUpdateTransactionPayload {
   amount?: number;
   type?: 'income' | 'expense';
   accountId?: string;
+  description?: string;
   categoryId?: string | null;
   notes?: string | null;
+
+  // Linking fields
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution';
+  linkedGoalId?: string | null;
+  linkedLoanTrackerId?: string | null;
+  linkedSavingsTrackerId?: string | null;
 }
