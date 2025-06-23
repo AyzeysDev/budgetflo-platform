@@ -20,10 +20,11 @@ export interface WebAppTransaction {
   updatedAt: string; // ISO date string
   
   // Linking fields
-  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'system_reconciliation';
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'system_reconciliation' | 'account_transfer';
   linkedGoalId?: string | null;
   linkedLoanTrackerId?: string | null;
   linkedSavingsTrackerId?: string | null;
+  linkedTransactionId?: string | null;
 
   // Enriched data for display purposes
   category?: WebAppCategory | null;
@@ -50,6 +51,17 @@ export interface WebAppCreateTransactionPayload {
 }
 
 /**
+ * Payload for creating a new account transfer via the BFF.
+ */
+export interface WebAppTransferPayload {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string; // ISO date string
+  description: string;
+}
+
+/**
  * Payload for updating an existing transaction via the BFF.
  */
 export interface WebAppUpdateTransactionPayload {
@@ -62,8 +74,9 @@ export interface WebAppUpdateTransactionPayload {
   notes?: string | null;
 
   // Linking fields
-  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution';
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'account_transfer';
   linkedGoalId?: string | null;
   linkedLoanTrackerId?: string | null;
   linkedSavingsTrackerId?: string | null;
+  linkedTransactionId?: string | null;
 }

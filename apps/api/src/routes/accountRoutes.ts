@@ -39,6 +39,20 @@ router.get('/', asyncHandler(async (req, res) => {
   res.status(200).json({ data: accounts });
 }));
 
+// GET /api/users/:userId/accounts/:accountId
+router.get('/:accountId', [param('accountId').isString().notEmpty()], asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  const { userId, accountId } = req.params;
+  const account = await accountService.getAccountById(accountId, userId);
+  if (!account) {
+    return res.status(404).json({ error: "Account not found or not authorized." });
+  }
+  res.status(200).json({ data: account });
+}));
+
 // POST /api/users/:userId/accounts
 router.post('/', createAccountValidationRules, asyncHandler(async (req, res) => {
   const errors = validationResult(req);

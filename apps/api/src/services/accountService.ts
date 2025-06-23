@@ -66,6 +66,30 @@ export async function getAccountsByUserId(userId: string): Promise<AccountDTO[]>
   return accounts;
 }
 
+export async function getAccountById(accountId: string, userId: string): Promise<AccountDTO | null> {
+  const accountRef = getAccountsCollection().doc(accountId);
+  const doc = await accountRef.get();
+
+  if (!doc.exists) {
+    console.log(`Account with ID ${accountId} not found.`);
+    return null;
+  }
+
+  const accountData = doc.data() as Account;
+
+  if (accountData.userId !== userId) {
+    console.warn(`User ${userId} is not authorized to access account ${accountId}.`);
+    return null;
+  }
+  
+  if (!accountData.isActive) {
+    console.log(`Account ${accountId} is inactive.`);
+    return null;
+  }
+
+  return convertAccountToDTO(accountData);
+}
+
 export async function updateAccount(accountId: string, userId: string, payload: UpdateAccountPayload): Promise<AccountDTO | null> {
   const accountRef = getAccountsCollection().doc(accountId);
   const doc = await accountRef.get();

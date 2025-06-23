@@ -17,13 +17,15 @@ export interface Transaction {
   notes?: string | null;      // Optional user notes
   
   /** The source of the transaction to differentiate user input from system-generated events */
-  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'system_reconciliation';
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'system_reconciliation' | 'account_transfer';
   /** The goal this transaction contributes to */
   linkedGoalId?: string | null;
   /** The loan tracker this transaction is a payment for */
   linkedLoanTrackerId?: string | null;
   /** The savings tracker this transaction contributes to */
   linkedSavingsTrackerId?: string | null;
+  /** For transfers, the ID of the corresponding transaction */
+  linkedTransactionId?: string | null;
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -43,10 +45,11 @@ export interface CreateTransactionPayload {
   description: string;
   notes?: string | null;
 
-  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution';
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'account_transfer';
   linkedGoalId?: string;
   linkedLoanTrackerId?: string;
   linkedSavingsTrackerId?: string;
+  linkedTransactionId?: string;
 }
 
 /**
@@ -63,10 +66,22 @@ export interface UpdateTransactionPayload {
   notes?: string | null;
 
   // These are less commonly updated but supported for flexibility
-  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution';
+  source?: 'user_manual' | 'goal_contribution' | 'loan_payment' | 'savings_contribution' | 'account_transfer';
   linkedGoalId?: string | null;
   linkedLoanTrackerId?: string | null;
   linkedSavingsTrackerId?: string | null;
+  linkedTransactionId?: string | null;
+}
+
+/**
+ * Defines the shape of the data required to create a new transfer between accounts.
+ */
+export interface CreateTransferPayload {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string; // ISO date string from client
+  description: string;
 }
 
 // --- Data Transfer Object (DTO) for API Responses ---

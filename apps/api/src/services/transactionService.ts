@@ -5,8 +5,9 @@ import {
   CreateTransactionPayload,
   UpdateTransactionPayload,
   TransactionDTO,
+  CreateTransferPayload,
 } from '../models/transaction.model';
-import { Account } from '../models/account.model';
+import { Account, LIABILITY_TYPES } from '../models/account.model';
 import { Budget } from '../models/budget.model';
 import { Goal } from '../models/goal.model';
 import { LoanTracker, SavingsTracker } from '../models/tracker.model';
@@ -183,32 +184,71 @@ export async function deleteTransaction(userId: string, transactionId: string): 
     if (!firestoreInstance) throw new Error("Firestore not initialized.");
 
     await firestoreInstance.runTransaction(async (t) => {
-        // --- PHASE 1: READS ---
-        const transactionDoc = await t.get(transactionRef);
-        if (!transactionDoc.exists) throw new Error("Transaction not found.");
-        const data = transactionDoc.data() as Transaction;
-        if (data.userId !== userId) throw new Error("Unauthorized");
+        // --- PHASE 1: ALL READS ---
+        const mainTransactionDoc = await t.get(transactionRef);
+        if (!mainTransactionDoc.exists) throw new Error("Transaction not found.");
+        const mainTransaction = mainTransactionDoc.data() as Transaction;
+        if (mainTransaction.userId !== userId) throw new Error("Unauthorized");
 
-        const docsToGet: DocumentReference[] = [accountsCollection.doc(data.accountId)];
-        if(data.linkedGoalId) docsToGet.push(goalsCollection.doc(data.linkedGoalId));
-        if(data.linkedLoanTrackerId) docsToGet.push(loanTrackersCollection.doc(data.linkedLoanTrackerId));
-        if(data.linkedSavingsTrackerId) docsToGet.push(savingsTrackersCollection.doc(data.linkedSavingsTrackerId));
+        const mainAccountDoc = await t.get(accountsCollection.doc(mainTransaction.accountId));
+        if (!mainAccountDoc.exists) throw new Error("Account for transaction not found.");
 
-        const otherDocs = await t.getAll(...docsToGet);
-        const accountDoc = otherDocs.shift();
-        if (!accountDoc) throw new Error("Account not found during transaction deletion.");
+        let linkedTransactionDoc: FirebaseFirestore.DocumentSnapshot | null = null;
+        let linkedAccountDoc: FirebaseFirestore.DocumentSnapshot | null = null;
+        let budgetDocs: FirebaseFirestore.QueryDocumentSnapshot<Budget>[] = [];
+        let goalAndTrackerDocs: FirebaseFirestore.DocumentSnapshot[] = [];
 
-
-        const budgetDocs = data.categoryId ? await getAffectedBudgets(t, userId, data.categoryId, (data.date as Timestamp).toDate()) : [];
+        if (mainTransaction.source === 'account_transfer' && mainTransaction.linkedTransactionId) {
+            const linkedTxRef = transactionsCollection.doc(mainTransaction.linkedTransactionId);
+            linkedTransactionDoc = await t.get(linkedTxRef);
+            if (linkedTransactionDoc.exists) {
+                const linkedTxData = linkedTransactionDoc.data() as Transaction;
+                linkedAccountDoc = await t.get(accountsCollection.doc(linkedTxData.accountId));
+            }
+        } else if (mainTransaction.type === 'expense' && mainTransaction.categoryId) {
+            budgetDocs = await getAffectedBudgets(t, userId, mainTransaction.categoryId, (mainTransaction.date as Timestamp).toDate());
+        }
         
-        // --- PHASE 2: WRITES ---
-        t.update(accountDoc.ref, { balance: FieldValue.increment(data.type === 'income' ? -data.amount : data.amount) });
-        budgetDocs.forEach(doc => t.update(doc.ref, { spentAmount: FieldValue.increment(-data.amount) }));
+        const goalAndTrackerRefs: (DocumentReference | null)[] = [
+            mainTransaction.linkedGoalId ? goalsCollection.doc(mainTransaction.linkedGoalId) : null,
+            mainTransaction.linkedLoanTrackerId ? loanTrackersCollection.doc(mainTransaction.linkedLoanTrackerId) : null,
+            mainTransaction.linkedSavingsTrackerId ? savingsTrackersCollection.doc(mainTransaction.linkedSavingsTrackerId) : null,
+        ];
         
+        const validRefs = goalAndTrackerRefs.filter((ref): ref is DocumentReference => ref !== null);
+
+        if (validRefs.length > 0) {
+            goalAndTrackerDocs = await t.getAll(...validRefs);
+        }
+
+        // --- END OF READS ---
+
+        // --- PHASE 2: ALL WRITES ---
+        const mainAccountData = mainAccountDoc.data() as Account;
+        const mainIsLiability = (LIABILITY_TYPES as readonly string[]).includes(mainAccountData.type);
+        let mainBalanceChange = 0;
+        if (mainTransaction.type === 'expense') {
+            mainBalanceChange = mainIsLiability ? -mainTransaction.amount : mainTransaction.amount;
+        } else {
+            mainBalanceChange = mainIsLiability ? mainTransaction.amount : -mainTransaction.amount;
+        }
+        t.update(mainAccountDoc.ref, { balance: FieldValue.increment(mainBalanceChange) });
+
+        if (linkedTransactionDoc?.exists && linkedAccountDoc?.exists) {
+            const linkedTx = linkedTransactionDoc.data() as Transaction;
+            const linkedAccountData = linkedAccountDoc.data() as Account;
+            const linkedIsLiability = (LIABILITY_TYPES as readonly string[]).includes(linkedAccountData.type);
+            const linkedBalanceChange = linkedIsLiability ? linkedTx.amount : -linkedTx.amount;
+            t.update(linkedAccountDoc.ref, { balance: FieldValue.increment(linkedBalanceChange) });
+            t.delete(linkedTransactionDoc.ref);
+        }
+        
+        budgetDocs.forEach(doc => t.update(doc.ref, { spentAmount: FieldValue.increment(-mainTransaction.amount) }));
+
         let docIndex = 0;
-        if(data.linkedGoalId) _applyGoalUpdate(t, otherDocs[docIndex++], -data.amount);
-        if(data.linkedLoanTrackerId) _applyLoanUpdate(t, otherDocs[docIndex++], -data.amount);
-        if(data.linkedSavingsTrackerId) _applySavingsUpdate(t, otherDocs[docIndex++]);
+        if(mainTransaction.linkedGoalId) _applyGoalUpdate(t, goalAndTrackerDocs[docIndex++], -mainTransaction.amount);
+        if(mainTransaction.linkedLoanTrackerId) _applyLoanUpdate(t, goalAndTrackerDocs[docIndex++], -mainTransaction.amount);
+        if(mainTransaction.linkedSavingsTrackerId) _applySavingsUpdate(t, goalAndTrackerDocs[docIndex++]);
         
         t.delete(transactionRef);
     });
@@ -240,4 +280,88 @@ if (filters.accountId) {
         return [];
     }
     return snapshot.docs.map(doc => convertTransactionToDTO(doc.data()));
+}
+
+export async function createTransfer(userId: string, payload: CreateTransferPayload): Promise<{ from: TransactionDTO, to: TransactionDTO }> {
+  const { fromAccountId, toAccountId, amount, date, description } = payload;
+  if (fromAccountId === toAccountId) throw new Error("Source and destination accounts cannot be the same.");
+  if (amount <= 0) throw new Error("Transfer amount must be positive.");
+
+  const fromTransactionRef = transactionsCollection.doc();
+  const toTransactionRef = transactionsCollection.doc();
+  const transactionDate = new Date(date);
+  const now = FieldValue.serverTimestamp() as Timestamp;
+
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) throw new Error("Firestore not initialized.");
+
+  await firestoreInstance.runTransaction(async (t) => {
+    // --- 1. READS ---
+    const fromAccountRef = accountsCollection.doc(fromAccountId);
+    const toAccountRef = accountsCollection.doc(toAccountId);
+    const [fromAccountDoc, toAccountDoc] = await t.getAll(fromAccountRef, toAccountRef);
+
+    if (!fromAccountDoc.exists) throw new Error(`Source account ${fromAccountId} not found.`);
+    if (!toAccountDoc.exists) throw new Error(`Destination account ${toAccountId} not found.`);
+
+    const fromAccountData = fromAccountDoc.data() as Account;
+    const toAccountData = toAccountDoc.data() as Account;
+
+    // --- 2. WRITES ---
+    // Create the 'expense' transaction from the source account
+    const fromTransactionData: Transaction = {
+      transactionId: fromTransactionRef.id,
+      userId,
+      accountId: fromAccountId,
+      type: 'expense',
+      amount,
+      date: Timestamp.fromDate(transactionDate),
+      description: `Transfer to ${(toAccountDoc.data() as Account).name}: ${description}`,
+      source: 'account_transfer',
+      linkedTransactionId: toTransactionRef.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    t.set(fromTransactionRef, fromTransactionData);
+
+    // Create the 'income' transaction to the destination account
+    const toTransactionData: Transaction = {
+      transactionId: toTransactionRef.id,
+      userId,
+      accountId: toAccountId,
+      type: 'income',
+      amount,
+      date: Timestamp.fromDate(transactionDate),
+      description: `Transfer from ${(fromAccountDoc.data() as Account).name}: ${description}`,
+      source: 'account_transfer',
+      linkedTransactionId: fromTransactionRef.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    t.set(toTransactionRef, toTransactionData);
+
+    // Determine balance changes based on account types
+    const fromIsLiability = (LIABILITY_TYPES as readonly string[]).includes(fromAccountData.type);
+    const toIsLiability = (LIABILITY_TYPES as readonly string[]).includes(toAccountData.type);
+
+    // If transferring FROM a liability, you're borrowing, so debt increases (+amount).
+    // If transferring FROM an asset, value decreases (-amount).
+    const fromBalanceChange = fromIsLiability ? amount : -amount;
+
+    // If transferring TO a liability, you're paying it down, so debt decreases (-amount).
+    // If transferring TO an asset, value increases (+amount).
+    const toBalanceChange = toIsLiability ? -amount : amount;
+
+    // Update account balances
+    t.update(fromAccountRef, { balance: FieldValue.increment(fromBalanceChange) });
+    t.update(toAccountRef, { balance: FieldValue.increment(toBalanceChange) });
+  });
+
+  const fromDoc = await fromTransactionRef.get();
+  const toDoc = await toTransactionRef.get();
+
+  return {
+    from: convertTransactionToDTO(fromDoc.data() as Transaction),
+    to: convertTransactionToDTO(toDoc.data() as Transaction),
+  };
 }

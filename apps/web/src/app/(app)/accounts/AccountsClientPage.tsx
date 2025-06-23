@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, WalletCards, TrendingUp, TrendingDown } from 'lucide-react';
+import { PlusCircle, Landmark, CreditCard, PiggyBank, Briefcase, HandCoins, HelpCircle, MoreVertical, Edit, Trash2, Banknote, Home, Car, GraduationCap, Coins, PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, WalletCards, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import type { WebAppAccount, WebAppAccountType, WebAppAssetType, WebAppLiabilityType } from '@/types/account';
 import { ASSET_TYPES, LIABILITY_TYPES } from '@/types/account';
 import AccountForm from './AccountForm';
+import TransferForm from './TransferForm';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { PieChart, Pie, Tooltip } from 'recharts';
@@ -68,7 +69,9 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
   const [accounts, setAccounts] = useState<WebAppAccount[]>(initialAccounts);
   const [accountToDelete, setAccountToDelete] = useState<WebAppAccount | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isTransferFormOpen, setIsTransferFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<WebAppAccount | null>(null);
+  const [isRefetching, setIsRefetching] = useState(false);
 
   useEffect(() => {
     setAccounts(initialAccounts);
@@ -78,6 +81,14 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
     setEditingAccount(null);
     setIsFormOpen(true);
   }
+
+  const handleTransferClick = () => {
+    if (accounts.length < 2) {
+      toast.error("You need at least two accounts to make a transfer.");
+      return;
+    }
+    setIsTransferFormOpen(true);
+  };
 
   const handleEditClick = (account: WebAppAccount) => {
     setEditingAccount(account);
@@ -163,6 +174,29 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
     });
     setIsFormOpen(false); // Close the form on success
   };
+
+  const refetchAccounts = async () => {
+    setIsRefetching(true);
+    const toastId = 'refetch-accounts';
+    toast.loading("Refreshing account balances...", { id: toastId });
+    try {
+      const response = await fetch('/api/accounts');
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to refresh accounts.');
+      }
+      setAccounts(result.data);
+      toast.success("Accounts updated successfully!", { id: toastId });
+    } catch (error) {
+      toast.error((error as Error).message, { id: toastId });
+    } finally {
+      setIsRefetching(false);
+    }
+  };
+
+  const onTransferSaveSuccess = () => {
+    refetchAccounts();
+  };
   
   const hasAssets = Object.keys(groupedAssets).length > 0;
   const hasLiabilities = Object.keys(groupedLiabilities).length > 0;
@@ -181,9 +215,14 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
               A complete overview of your financial accounts.
             </p>
           </div>
-          <Button onClick={handleAddClick}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Account
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleTransferClick} variant="outline" disabled={isRefetching}>
+                <ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer
+            </Button>
+            <Button onClick={handleAddClick} disabled={isRefetching}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add Account
+            </Button>
+          </div>
         </div>
 
         <Card>
@@ -433,6 +472,13 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
         onOpenChange={setIsFormOpen}
         accountToEdit={editingAccount}
         onSaveSuccess={onFormSaveSuccess}
+      />
+
+      <TransferForm
+        isOpen={isTransferFormOpen}
+        onOpenChange={setIsTransferFormOpen}
+        accounts={accounts}
+        onSaveSuccess={onTransferSaveSuccess}
       />
       
       {accountToDelete && (

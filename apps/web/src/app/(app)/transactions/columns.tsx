@@ -2,7 +2,7 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, Edit, Trash2 } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, Edit, Trash2, ArrowRightLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +19,8 @@ import { WebAppAccount } from "@/types/account";
 import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
 import { cn } from "@/lib/utils";
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -90,8 +92,16 @@ export const columns = (
     accessorKey: "category",
     header: "Category",
     cell: ({ row }) => {
-      const category = row.original.category;
-      if (!category) return <span className="text-muted-foreground">Uncategorized</span>;
+      const category = row.original.category as WebAppCategory | null;
+      const source = row.original.source;
+
+      if (source === 'account_transfer') {
+        return <Badge variant="outline" className="text-muted-foreground">Transfer</Badge>;
+      }
+
+      if (!category) {
+        return <span className="text-muted-foreground text-xs italic">Uncategorized</span>;
+      }
       return (
         <Badge variant="outline" className="font-normal">
           <IconRenderer name={category.icon as AvailableIconName} size={14} className="mr-1.5" style={{color: category.color || 'inherit'}} />
@@ -110,32 +120,40 @@ export const columns = (
   },
   {
     accessorKey: "amount",
-    header: ({ column }) => {
-      return (
-        <div className="text-right">
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Amount
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      );
-    },
+    header: ({ column }) => <div className="text-right">Amount</div>,
     cell: ({ row }) => {
       const amount = parseFloat(row.getValue("amount"));
-      const type = row.original.type;
-      const isIncome = type === 'income';
+      const { type, source } = row.original;
 
-      const formattedAmount = formatCurrency(amount);
+      const isTransfer = source === 'account_transfer';
 
+      const formatted = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(amount);
+
+      let amountColorClass = "text-foreground";
+      if (isTransfer) {
+        amountColorClass = "text-muted-foreground";
+      } else if (type === 'income') {
+        amountColorClass = "text-green-600 dark:text-green-500";
+      } else if (type === 'expense') {
+        amountColorClass = "text-red-600 dark:text-red-500";
+      }
+      
+      return <div className={cn("text-right font-medium", amountColorClass)}>{formatted}</div>
+    },
+  },
+  {
+    accessorKey: "description",
+    header: "Description",
+    cell: ({ row }) => {
+      const { description, source } = row.original;
+      const isTransfer = source === 'account_transfer';
       return (
-        <div className={cn(
-          "text-right font-medium",
-          isIncome ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
-        )}>
-          {isIncome ? `+${formattedAmount}` : `-${formattedAmount}`}
+        <div className="flex items-center gap-2">
+          {isTransfer && <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />}
+          <span className="truncate max-w-[250px]">{description}</span>
         </div>
       );
     },

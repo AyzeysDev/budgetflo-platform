@@ -156,7 +156,16 @@ export default function TransactionsClientPage({
     const categoriesMap = new Map(categories.map(c => [c.id, c]));
     const accountsMap = new Map(accounts.map(a => [a.accountId, a]));
     
-    return transactions.map(t => ({
+    // Filter out the 'income' side of transfers to avoid showing two lines for one action.
+    // The 'expense' side's description already details the full transfer.
+    const filteredTransactions = transactions.filter(t => {
+      if (t.source === 'account_transfer' && t.type === 'income') {
+        return false;
+      }
+      return true;
+    });
+
+    return filteredTransactions.map(t => ({
       ...t,
       category: t.categoryId ? categoriesMap.get(t.categoryId) : null,
       account: accountsMap.get(t.accountId) || null,

@@ -2,7 +2,7 @@
 import express, { Request, Response, Router, NextFunction } from 'express';
 import * as transactionService from '../services/transactionService';
 import { body, param, validationResult, query } from 'express-validator';
-import { CreateTransactionPayload, UpdateTransactionPayload } from '../models/transaction.model';
+import { CreateTransactionPayload, UpdateTransactionPayload, CreateTransferPayload } from '../models/transaction.model';
 
 const router: Router = express.Router({ mergeParams: true });
 
@@ -36,6 +36,14 @@ const updateTransactionValidationRules = [
   body('accountId').optional().isString().notEmpty(),
   body('categoryId').optional({ nullable: true }).isString().notEmpty(),
   body('notes').optional({ nullable: true }).isString().isLength({ max: 500 }),
+];
+
+const transferValidationRules = [
+  body('fromAccountId').isString().notEmpty().withMessage('Source account ID is required.'),
+  body('toAccountId').isString().notEmpty().withMessage('Destination account ID is required.'),
+  body('amount').isFloat({ gt: 0 }).withMessage('Transfer amount must be a positive number.'),
+  body('date').isISO8601().toDate().withMessage('A valid transfer date is required.'),
+  body('description').isString().notEmpty().isLength({ max: 150 }).withMessage('Description is required.'),
 ];
 
 // --- ROUTES ---
@@ -74,6 +82,22 @@ router.post(
     const payload: CreateTransactionPayload = req.body;
     const newTransaction = await transactionService.createTransaction(userId, payload);
     res.status(201).json({ message: 'Transaction created successfully.', data: newTransaction });
+  })
+);
+
+// POST /api/users/:userId/transactions/transfer - Create a new transfer
+router.post(
+  '/transfer',
+  transferValidationRules,
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { userId } = req.params;
+    const payload: CreateTransferPayload = req.body;
+    const transferResult = await transactionService.createTransfer(userId, payload);
+    res.status(201).json({ message: 'Transfer completed successfully.', data: transferResult });
   })
 );
 
