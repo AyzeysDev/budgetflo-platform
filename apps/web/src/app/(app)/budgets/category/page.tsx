@@ -31,7 +31,7 @@ async function getCategoryBudgetsData(userId: string, cookieHeader: string | nul
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
-  const categoryBudgetsUrl = new URL(`/api/budgets?isOverall=false&period=monthly&year=${currentYear}&month=${currentMonth}`, baseUrl).toString();
+  const categoryBudgetsUrl = new URL(`/api/budgets/category-budgets?year=${currentYear}&month=${currentMonth}`, baseUrl).toString();
   const categoriesUrl = new URL(`/api/categories`, baseUrl).toString();
 
   const fetchOptions: RequestInit = {

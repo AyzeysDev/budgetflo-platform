@@ -119,6 +119,8 @@ export interface UpdateBudgetPayload {
   startDate?: string;
   endDate?: string;
   isOverall?: boolean;
+  isRecurring?: boolean; // New field to indicate if a recurring rule should be created/updated
+  recurrenceRule?: string; // RRULE string if isRecurring is true
   notes?: string | null;
 }
 

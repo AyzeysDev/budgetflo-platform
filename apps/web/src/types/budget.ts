@@ -56,6 +56,8 @@ export interface WebAppUpdateBudgetPayload {
   startDate?: string;
   endDate?: string;
   isOverall?: boolean;
+  isRecurring?: boolean; // NEW: Option to make it recurring
+  recurrenceRule?: string; // NEW: RRULE if recurring
   notes?: string | null;
 }
 

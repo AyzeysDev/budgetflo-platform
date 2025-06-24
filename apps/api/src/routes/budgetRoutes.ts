@@ -70,6 +70,14 @@ const updateBudgetValidationRules = [
       }
       return true;
     }),
+  body('isRecurring').optional().isBoolean().withMessage('isRecurring must be a boolean.'),
+  body('recurrenceRule').optional().isString().withMessage('recurrenceRule must be a string if provided.')
+    .custom((value, { req }) => {
+      if (req.body.isRecurring === true && !value) {
+        throw new Error('recurrenceRule is required when isRecurring is true.');
+      }
+      return true;
+    }),
 ];
 
 const overallBudgetPayloadValidation = [
@@ -83,8 +91,8 @@ const overallBudgetPayloadValidation = [
 ];
 
 const monthlyOverviewValidationRules = [
-  query('year').isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
-  query('month').isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.')
+  query('year').toInt().isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
+  query('month').toInt().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.')
 ];
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
@@ -146,8 +154,8 @@ router.get(
   '/overall',
   [
     query('period').isIn(['monthly', 'yearly']).withMessage("Query param 'period' must be 'monthly' or 'yearly'."),
-    query('year').isInt({ min: 2000, max: 2100 }).withMessage('Valid query param `year` is required.'),
-    query('month').optional().isInt({ min: 1, max: 12 }).withMessage('Valid query param `month` (1-12) is required for monthly period.')
+    query('year').toInt().isInt({ min: 2000, max: 2100 }).withMessage('Valid query param `year` is required.'),
+    query('month').optional().toInt().isInt({ min: 1, max: 12 }).withMessage('Valid query param `month` (1-12) is required for monthly period.')
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -172,6 +180,34 @@ router.get(
 );
 
 // --- Category-Specific Budget Routes ---
+
+// New route for getting category budgets for a specific period (includes recurring)
+router.get(
+  '/category-budgets',
+  [
+    query('year').toInt().isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
+    query('month').toInt().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.')
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: "User ID missing from route parameters." });
+      return;
+    }
+    
+    const year = parseInt(req.query.year as string);
+    const month = parseInt(req.query.month as string);
+    
+    const categoryBudgets = await budgetService.getCategoryBudgetsForPeriod(userId, year, month);
+    res.status(200).json({ data: categoryBudgets });
+  })
+);
+
 router.post(
   '/',
   createBudgetValidationRules,
@@ -207,8 +243,8 @@ router.get(
     query('isOverall').optional().isBoolean().toBoolean(),
     query('activeOnly').optional().isBoolean().toBoolean(),
     query('period').optional().isIn(['monthly', 'yearly', 'custom']),
-    query('year').optional().isInt({ min: 2000, max: 2100 }),
-    query('month').optional().isInt({ min: 1, max: 12 }),
+    query('year').optional().toInt().isInt({ min: 2000, max: 2100 }),
+    query('month').optional().toInt().isInt({ min: 1, max: 12 }),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);

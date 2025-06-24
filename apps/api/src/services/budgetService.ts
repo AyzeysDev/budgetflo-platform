@@ -307,6 +307,49 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
         hasChanges = true;
     }
 
+    // Handle recurring logic
+    if (payload.isRecurring !== undefined) {
+      if (payload.isRecurring && payload.recurrenceRule) {
+        // Setting up recurring
+        dataToUpdate.isRecurring = true;
+        hasChanges = true;
+        
+        if (existingBudget.recurringRuleId) {
+          // Update existing recurring rule
+          await updateRecurringBudget(existingBudget.recurringRuleId, userId, { 
+            amount: payload.amount || existingBudget.amount,
+            recurrenceRule: payload.recurrenceRule,
+            name: payload.name || existingBudget.name,
+            notes: payload.notes !== undefined ? payload.notes : existingBudget.notes,
+          });
+        } else {
+          // Create new recurring rule
+          const startDate = dataToUpdate.startDate ? (dataToUpdate.startDate as Timestamp).toDate() : (existingBudget.startDate as Timestamp).toDate();
+          const newRecurringBudget = await createRecurringBudget(userId, {
+            name: payload.name || existingBudget.name,
+            categoryId: existingBudget.categoryId,
+            amount: payload.amount || existingBudget.amount,
+            recurrenceRule: payload.recurrenceRule,
+            startDate: startDate.toISOString(),
+            endDate: null,
+            isOverall: existingBudget.isOverall || false,
+            notes: payload.notes !== undefined ? payload.notes : existingBudget.notes,
+          });
+          dataToUpdate.recurringRuleId = newRecurringBudget.id;
+        }
+      } else if (!payload.isRecurring) {
+        // Turning off recurring
+        dataToUpdate.isRecurring = false;
+        dataToUpdate.recurringRuleId = null;
+        hasChanges = true;
+        
+        if (existingBudget.recurringRuleId) {
+          // Delete the existing recurring rule
+          await deleteRecurringBudget(existingBudget.recurringRuleId, userId);
+        }
+      }
+    }
+
     if (!hasChanges && Object.keys(dataToUpdate).length === 1) {
       console.log("No actual changes to update for budget:", budgetId);
       return convertBudgetToDTO(existingBudget);
@@ -895,5 +938,126 @@ export async function getMonthlyBudget(
   } catch (error) {
     console.error(`Error getting monthly budget for ${userId} - ${year}/${month}:`, error);
     throw new Error("Failed to get monthly budget.");
+  }
+}
+
+// New function to get category budgets for a specific period including recurring budgets
+export async function getCategoryBudgetsForPeriod(
+  userId: string,
+  year: number,
+  month: number
+): Promise<BudgetDTO[]> {
+  try {
+    // Get regular budgets for this specific month
+    const regularBudgets = await getBudgetsByUserId(userId, { isOverall: false, year, month });
+    
+    // Get all recurring budgets for this user
+    const recurringBudgets = await getRecurringBudgetsByUserId(userId);
+    
+    // Use UTC dates to avoid timezone issues
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    
+    const budgetMap = new Map<string, BudgetDTO>();
+    
+    // Add regular budgets to the map
+    for (const budget of regularBudgets) {
+      if (budget.categoryId) {
+        budgetMap.set(budget.categoryId, budget);
+      }
+    }
+    
+    // Process recurring budgets and add them if they apply to this month
+    for (const recurringBudget of recurringBudgets) {
+      // Skip overall budgets - we only want category budgets
+      if (recurringBudget.isOverall || !recurringBudget.categoryId) continue;
+      
+      const ruleStartDate = recurringBudget.startDate instanceof Timestamp 
+        ? recurringBudget.startDate.toDate() 
+        : new Date(recurringBudget.startDate);
+      
+      const ruleEndDate = recurringBudget.endDate 
+        ? (recurringBudget.endDate instanceof Timestamp 
+           ? recurringBudget.endDate.toDate() 
+           : new Date(recurringBudget.endDate))
+        : null;
+      
+      // Skip if recurring budget hasn't started yet
+      if (ruleStartDate > monthEnd) continue;
+      
+      // Skip if recurring budget has ended
+      if (ruleEndDate && ruleEndDate < monthStart) continue;
+      
+      try {
+        // Parse RRULE and check if it occurs in this month
+        const ruleOptions = RRule.parseString(recurringBudget.recurrenceRule);
+        
+        // Ensure rule start date is in UTC for accurate RRule processing
+        ruleOptions.dtstart = new Date(Date.UTC(
+          ruleStartDate.getUTCFullYear(), 
+          ruleStartDate.getUTCMonth(), 
+          ruleStartDate.getUTCDate()
+        ));
+        
+        if (ruleEndDate) {
+          ruleOptions.until = ruleEndDate;
+        }
+        
+        const rrule = new RRule(ruleOptions);
+        
+        // Check if this recurring budget applies to the current month
+        const occurrences = rrule.between(monthStart, monthEnd, true);
+        
+        if (occurrences.length > 0) {
+          // This recurring budget applies to this month
+          // If there's no regular budget for this category, create a virtual one from the recurring budget
+          if (!budgetMap.has(recurringBudget.categoryId)) {
+            // Get transactions for this category in this month to calculate spent amount
+            const transactions = await getTransactionsByUserId(userId, {
+              year: year.toString(),
+              month: month.toString()
+            });
+            
+            const categoryTransactions = transactions.filter(t => 
+              t.type === 'expense' && t.categoryId === recurringBudget.categoryId
+            );
+            
+            const spentAmount = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+            
+            // Create a virtual budget from the recurring budget
+            const virtualBudget: BudgetDTO = {
+              id: recurringBudget.id, // Use recurring budget ID
+              userId: recurringBudget.userId,
+              name: recurringBudget.name,
+              categoryId: recurringBudget.categoryId,
+              amount: recurringBudget.amount,
+              spentAmount: spentAmount,
+              period: 'monthly',
+              startDate: monthStart.toISOString(),
+              endDate: monthEnd.toISOString(),
+              isOverall: false,
+              isRecurring: true,
+              recurringRuleId: recurringBudget.id,
+              notes: recurringBudget.notes,
+              createdAt: (recurringBudget.createdAt instanceof Timestamp 
+                ? recurringBudget.createdAt.toDate() 
+                : new Date(recurringBudget.createdAt)).toISOString(),
+              updatedAt: (recurringBudget.updatedAt instanceof Timestamp 
+                ? recurringBudget.updatedAt.toDate() 
+                : new Date(recurringBudget.updatedAt)).toISOString(),
+            };
+            
+            budgetMap.set(recurringBudget.categoryId, virtualBudget);
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing RRULE for recurring budget ${recurringBudget.id}:`, error);
+      }
+    }
+    
+    return Array.from(budgetMap.values());
+  } catch (error) {
+    console.error(`Error getting category budgets for ${userId} - ${year}/${month}:`, error);
+    throw new Error("Failed to get category budgets for period.");
   }
 }
