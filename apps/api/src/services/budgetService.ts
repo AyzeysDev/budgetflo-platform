@@ -53,12 +53,14 @@ function convertBudgetToDTO(budgetData: Budget | undefined): BudgetDTO | null {
     amount: budgetData.amount,
     spentAmount: budgetData.spentAmount || 0,
     period: budgetData.period,
-    startDate: budgetData.startDate instanceof Timestamp ? budgetData.startDate.toDate().toISOString() : String(budgetData.startDate),
-    endDate: budgetData.endDate instanceof Timestamp ? budgetData.endDate.toDate().toISOString() : String(budgetData.endDate),
+    startDate: (budgetData.startDate instanceof Timestamp ? budgetData.startDate.toDate() : new Date(budgetData.startDate)).toISOString(),
+    endDate: (budgetData.endDate instanceof Timestamp ? budgetData.endDate.toDate() : new Date(budgetData.endDate)).toISOString(),
     isOverall: budgetData.isOverall || false,
+    isRecurring: budgetData.isRecurring || false,
+    recurringRuleId: budgetData.recurringRuleId || null,
     notes: budgetData.notes || null,
-    createdAt: budgetData.createdAt instanceof Timestamp ? budgetData.createdAt.toDate().toISOString() : String(budgetData.createdAt),
-    updatedAt: budgetData.updatedAt instanceof Timestamp ? budgetData.updatedAt.toDate().toISOString() : String(budgetData.updatedAt),
+    createdAt: (budgetData.createdAt instanceof Timestamp ? budgetData.createdAt.toDate() : new Date(budgetData.createdAt)).toISOString(),
+    updatedAt: (budgetData.updatedAt instanceof Timestamp ? budgetData.updatedAt.toDate() : new Date(budgetData.updatedAt)).toISOString(),
   };
   return dto;
 }

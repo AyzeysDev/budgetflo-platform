@@ -163,4 +163,6 @@ export interface BudgetDTO extends Omit<Budget, 'createdAt' | 'updatedAt' | 'sta
   endDate: string;
   isOverall: boolean;
   categoryId: string | null;
+  isRecurring?: boolean;
+  recurringRuleId?: string | null;
 }
