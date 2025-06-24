@@ -80,8 +80,9 @@ export interface CreateTransferPayload {
   fromAccountId: string;
   toAccountId: string;
   amount: number;
-  date: string; // ISO date string from client
+  date: string; // ISO 8601 string from client
   description: string;
+  notes?: string | null;
 }
 
 // --- Data Transfer Object (DTO) for API Responses ---

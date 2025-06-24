@@ -35,6 +35,14 @@ const commonBudgetValidationRules = [
       }
       return true;
     }),
+  body('isRecurring').optional().isBoolean().withMessage('isRecurring must be a boolean.'),
+  body('recurrenceRule').optional().isString().withMessage('recurrenceRule must be a string if provided.')
+    .custom((value, { req }) => {
+      if (req.body.isRecurring === true && !value) {
+        throw new Error('recurrenceRule is required when isRecurring is true.');
+      }
+      return true;
+    }),
 ];
 
 const createBudgetValidationRules = [...commonBudgetValidationRules];
@@ -70,8 +78,14 @@ const overallBudgetPayloadValidation = [
     body('year').isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
     body('month').optional().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required for monthly period.'),
     body('notes').optional({ nullable: true, checkFalsy: true }).isString().isLength({ max: 500 }).withMessage('Notes maximum 500 characters.'),
+    body('isRecurring').optional().isBoolean().withMessage('isRecurring must be a boolean.'),
+    body('recurrenceRule').optional().isString().withMessage('recurrenceRule must be a string if provided.')
 ];
 
+const monthlyOverviewValidationRules = [
+  query('year').isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
+  query('month').isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.')
+];
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -81,6 +95,31 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
       next(error); // Forward to global error handler
     }
   };
+
+// --- Monthly Overview Route ---
+// This endpoint provides a comprehensive view of all budgets (regular and recurring) for a month
+router.get(
+  '/monthly-overview',
+  monthlyOverviewValidationRules,
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: "User ID missing from route parameters." });
+      return;
+    }
+    
+    const year = parseInt(req.query.year as string);
+    const month = parseInt(req.query.month as string);
+    
+    const monthlyBudget = await budgetService.getMonthlyBudget(userId, year, month);
+    res.status(200).json({ data: monthlyBudget });
+  })
+);
 
 // --- Overall Budget Routes ---
 router.post(
@@ -97,8 +136,8 @@ router.post(
       res.status(400).json({ error: "User ID missing from route parameters." });
       return;
     }
-    const { amount, period, year, month, notes } = req.body;
-    const budget = await budgetService.setOverallBudget(userId, { amount, period, year, month, notes });
+    const { amount, period, year, month, notes, isRecurring, recurrenceRule } = req.body;
+    const budget = await budgetService.setOverallBudget(userId, { amount, period, year, month, notes, isRecurring, recurrenceRule });
     res.status(budget ? 200 : 201).json({ message: 'Overall budget set/updated successfully.', data: budget });
   })
 );
@@ -131,7 +170,6 @@ router.get(
     res.status(200).json({ data: budget });
   })
 );
-
 
 // --- Category-Specific Budget Routes ---
 router.post(

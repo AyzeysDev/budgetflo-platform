@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
   title: 'Budget Center | BudgetFlo',
-  description: 'Set your overall budget and navigate to detailed category budget management.',
+  description: 'Manage your monthly budgets and track spending across categories.',
 };
 
-// Helper function to fetch initial budget data, now simplified for just the overall budget
+// Helper function to fetch initial budget data
 async function getInitialBudgetsData(userId: string, cookieHeader: string | null): Promise<{
   overallBudget: WebAppBudget | null;
   error?: string;
@@ -44,15 +44,17 @@ async function getInitialBudgetsData(userId: string, cookieHeader: string | null
 
   try {
     console.log(`BudgetsPage: Fetching overall budget from ${overallBudgetUrl}`);
+    
     const overallRes = await fetch(overallBudgetUrl, fetchOptions);
 
     let overallBudget: WebAppBudget | null = null;
+
     if (overallRes.ok) {
       const result = await overallRes.json();
       overallBudget = result.data as WebAppBudget;
     } else if (overallRes.status !== 404) { // 404 is acceptable, means no budget set
-        const errorBody = await overallRes.json().catch(() => ({error: "Failed to parse error from overall budget API"}));
-        throw new Error(errorBody.error || `API Error: ${overallRes.status}`);
+      const errorBody = await overallRes.json().catch(() => ({error: "Failed to parse error from overall budget API"}));
+      throw new Error(errorBody.error || `API Error: ${overallRes.status}`);
     }
 
     return { overallBudget, error: undefined };

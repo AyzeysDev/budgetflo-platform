@@ -283,85 +283,77 @@ if (filters.accountId) {
 }
 
 export async function createTransfer(userId: string, payload: CreateTransferPayload): Promise<{ from: TransactionDTO, to: TransactionDTO }> {
-  const { fromAccountId, toAccountId, amount, date, description } = payload;
-  if (fromAccountId === toAccountId) throw new Error("Source and destination accounts cannot be the same.");
-  if (amount <= 0) throw new Error("Transfer amount must be positive.");
+    const fromAccountRef = accountsCollection.doc(payload.fromAccountId);
+    const toAccountRef = accountsCollection.doc(payload.toAccountId);
+    const fromTransactionRef = transactionsCollection.doc();
+    const toTransactionRef = transactionsCollection.doc();
+    
+    if (payload.fromAccountId === payload.toAccountId) {
+        throw new Error("Source and destination accounts cannot be the same.");
+    }
+    if (payload.amount <= 0) {
+        throw new Error("Transfer amount must be positive.");
+    }
 
-  const fromTransactionRef = transactionsCollection.doc();
-  const toTransactionRef = transactionsCollection.doc();
-  const transactionDate = new Date(date);
-  const now = FieldValue.serverTimestamp() as Timestamp;
+    const firestoreInstance = firestore;
+    if (!firestoreInstance) throw new Error("Firestore not initialized.");
 
-  const firestoreInstance = firestore;
-  if (!firestoreInstance) throw new Error("Firestore not initialized.");
+    await firestoreInstance.runTransaction(async (t) => {
+        const [fromAccountDoc, toAccountDoc] = await t.getAll(fromAccountRef, toAccountRef);
 
-  await firestoreInstance.runTransaction(async (t) => {
-    // --- 1. READS ---
-    const fromAccountRef = accountsCollection.doc(fromAccountId);
-    const toAccountRef = accountsCollection.doc(toAccountId);
-    const [fromAccountDoc, toAccountDoc] = await t.getAll(fromAccountRef, toAccountRef);
+        if (!fromAccountDoc.exists || !toAccountDoc.exists) {
+            throw new Error("One or both accounts not found.");
+        }
 
-    if (!fromAccountDoc.exists) throw new Error(`Source account ${fromAccountId} not found.`);
-    if (!toAccountDoc.exists) throw new Error(`Destination account ${toAccountId} not found.`);
+        const fromAccountData = fromAccountDoc.data() as Account;
+        const toAccountData = toAccountDoc.data() as Account;
+        if (fromAccountData.userId !== userId || toAccountData.userId !== userId) {
+            throw new Error("Unauthorized access to one or both accounts.");
+        }
+        
+        const transferDate = payload.date ? Timestamp.fromDate(new Date(payload.date)) : (FieldValue.serverTimestamp() as Timestamp);
+        const commonData = {
+            userId,
+            amount: payload.amount,
+            date: transferDate,
+            notes: payload.notes || null,
+            source: 'account_transfer' as const,
+            createdAt: FieldValue.serverTimestamp() as Timestamp,
+            updatedAt: FieldValue.serverTimestamp() as Timestamp,
+        };
 
-    const fromAccountData = fromAccountDoc.data() as Account;
-    const toAccountData = toAccountDoc.data() as Account;
+        const fromTransaction: Transaction = {
+            ...commonData,
+            transactionId: fromTransactionRef.id,
+            accountId: payload.fromAccountId,
+            type: 'expense',
+            description: `Transfer to ${toAccountData.name}`,
+            categoryId: null, // Transfers are not categorized
+            linkedTransactionId: toTransactionRef.id,
+        };
 
-    // --- 2. WRITES ---
-    // Create the 'expense' transaction from the source account
-    const fromTransactionData: Transaction = {
-      transactionId: fromTransactionRef.id,
-      userId,
-      accountId: fromAccountId,
-      type: 'expense',
-      amount,
-      date: Timestamp.fromDate(transactionDate),
-      description: `Transfer to ${(toAccountDoc.data() as Account).name}: ${description}`,
-      source: 'account_transfer',
-      linkedTransactionId: toTransactionRef.id,
-      createdAt: now,
-      updatedAt: now,
+        const toTransaction: Transaction = {
+            ...commonData,
+            transactionId: toTransactionRef.id,
+            accountId: payload.toAccountId,
+            type: 'income',
+            description: `Transfer from ${fromAccountData.name}`,
+            categoryId: null,
+            linkedTransactionId: fromTransactionRef.id,
+        };
+
+        t.set(fromTransactionRef, fromTransaction);
+        t.set(toTransactionRef, toTransaction);
+        
+        t.update(fromAccountRef, { balance: FieldValue.increment(-payload.amount) });
+        t.update(toAccountRef, { balance: FieldValue.increment(payload.amount) });
+    });
+
+    const fromDoc = await fromTransactionRef.get();
+    const toDoc = await toTransactionRef.get();
+    
+    return {
+        from: convertTransactionToDTO(fromDoc.data() as Transaction),
+        to: convertTransactionToDTO(toDoc.data() as Transaction)
     };
-    t.set(fromTransactionRef, fromTransactionData);
-
-    // Create the 'income' transaction to the destination account
-    const toTransactionData: Transaction = {
-      transactionId: toTransactionRef.id,
-      userId,
-      accountId: toAccountId,
-      type: 'income',
-      amount,
-      date: Timestamp.fromDate(transactionDate),
-      description: `Transfer from ${(fromAccountDoc.data() as Account).name}: ${description}`,
-      source: 'account_transfer',
-      linkedTransactionId: fromTransactionRef.id,
-      createdAt: now,
-      updatedAt: now,
-    };
-    t.set(toTransactionRef, toTransactionData);
-
-    // Determine balance changes based on account types
-    const fromIsLiability = (LIABILITY_TYPES as readonly string[]).includes(fromAccountData.type);
-    const toIsLiability = (LIABILITY_TYPES as readonly string[]).includes(toAccountData.type);
-
-    // If transferring FROM a liability, you're borrowing, so debt increases (+amount).
-    // If transferring FROM an asset, value decreases (-amount).
-    const fromBalanceChange = fromIsLiability ? amount : -amount;
-
-    // If transferring TO a liability, you're paying it down, so debt decreases (-amount).
-    // If transferring TO an asset, value increases (+amount).
-    const toBalanceChange = toIsLiability ? -amount : amount;
-
-    // Update account balances
-    t.update(fromAccountRef, { balance: FieldValue.increment(fromBalanceChange) });
-    t.update(toAccountRef, { balance: FieldValue.increment(toBalanceChange) });
-  });
-
-  const fromDoc = await fromTransactionRef.get();
-  const toDoc = await toTransactionRef.get();
-
-  return {
-    from: convertTransactionToDTO(fromDoc.data() as Transaction),
-    to: convertTransactionToDTO(toDoc.data() as Transaction),
-  };
 }

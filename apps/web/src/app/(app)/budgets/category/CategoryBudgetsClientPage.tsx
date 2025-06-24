@@ -129,7 +129,7 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, isSaving }: Cat
       {isBudgetSet && (
         <div className="flex items-center gap-1 self-start sm:self-center">
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(budget)} disabled={isSaving}>
-            <Trash2 className="w-4 w-4" />
+            <Trash2 className="w-4" />
             <span className="sr-only">Delete Budget</span>
           </Button>
         </div>

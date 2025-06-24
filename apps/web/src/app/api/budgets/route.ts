@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
   if (searchParams.get('year')) backendSearchParams.set('year', searchParams.get('year')!);
   if (searchParams.get('month')) backendSearchParams.set('month', searchParams.get('month')!);
 
-
   try {
     const targetUrl = `${expressApiUrl}/users/${userId}/budgets${backendSearchParams.toString() ? `?${backendSearchParams.toString()}` : ''}`;
     console.log(`[BFF GET /api/budgets] Forwarding to: ${targetUrl}`);
@@ -80,7 +79,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST to create a new category-specific budget
+// POST to create a new budget (category-specific or overall)
 export async function POST(req: NextRequest) {
   if (!expressApiUrl) {
     return NextResponse.json({ error: "API service endpoint is not configured." }, { status: 503 });
@@ -109,7 +108,9 @@ export async function POST(req: NextRequest) {
   if (payload.isOverall === true && payload.categoryId) {
     return NextResponse.json({ error: "categoryId should not be provided for an overall budget." }, { status: 400 });
   }
-
+  if (payload.isRecurring === true && !payload.recurrenceRule) {
+    return NextResponse.json({ error: "recurrenceRule is required when isRecurring is true." }, { status: 400 });
+  }
 
   try {
     const targetUrl = `${expressApiUrl}/users/${userId}/budgets`;

@@ -1,7 +1,7 @@
 // apps/web/src/app/api/budgets/[budgetId]/route.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
-import type { WebAppUpdateBudgetPayload } from '@/types/budget';
+import type { WebAppUpdateRecurringBudgetPayload } from '@/types/budget';
 
 const expressApiUrl = process.env.EXPRESS_API_URL;
 const nextAuthSecret = process.env.NEXTAUTH_SECRET;
@@ -96,7 +96,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Invalid Budget ID parameter." }, { status: 400 });
   }
 
-  let payload: WebAppUpdateBudgetPayload;
+  let payload: WebAppUpdateRecurringBudgetPayload;
   try {
     payload = await req.json();
   } catch (error) {

@@ -52,7 +52,9 @@ const overallBudgetFormSchema = z.object({
         invalid_type_error: "Budget amount must be a valid number."
     })
     .min(0.01, "Amount must be greater than 0."),
+  isRecurring: z.boolean().default(false),
 });
+
 type OverallBudgetFormData = z.infer<typeof overallBudgetFormSchema>;
 
 const formatCurrency = (amount: number | null | undefined): string => {
@@ -71,7 +73,6 @@ export default function BudgetsClientPage({
   const [overallBudget, setOverallBudget] = useState<WebAppBudget | null>(initialOverallBudget);
   const [isSubmittingOverall, setIsSubmittingOverall] = useState(false);
   const [isLoadingPageData, setIsLoadingPageData] = useState(false);
-  const [isRecurring, setIsRecurring] = useState(false);
   
   const isInitialMount = useRef(true);
 
@@ -79,13 +80,17 @@ export default function BudgetsClientPage({
     control: overallControl,
     handleSubmit: handleOverallSubmit,
     reset: resetOverallForm,
+    watch,
     formState: { errors: overallErrors, isDirty: isOverallDirty },
   } = useForm<OverallBudgetFormData>({
     resolver: zodResolver(overallBudgetFormSchema),
     defaultValues: {
       amount: initialOverallBudget?.amount ?? undefined,
+      isRecurring: initialOverallBudget?.isRecurring ?? false,
     },
   });
+
+  const isRecurring = watch('isRecurring');
 
   const fetchBudgetDataForPeriod = useCallback(async (year: number, month: number) => {
     setIsLoadingPageData(true);
@@ -100,6 +105,7 @@ export default function BudgetsClientPage({
         setOverallBudget(newOverallBudget);
         resetOverallForm({
             amount: newOverallBudget?.amount || undefined,
+            isRecurring: newOverallBudget?.isRecurring || false,
         });
         
     } catch (error) {
@@ -121,6 +127,7 @@ export default function BudgetsClientPage({
     setOverallBudget(initialOverallBudget);
     resetOverallForm({
       amount: initialOverallBudget?.amount,
+      isRecurring: initialOverallBudget?.isRecurring || false,
     });
   }, [initialOverallBudget, resetOverallForm]);
 
@@ -148,24 +155,32 @@ export default function BudgetsClientPage({
   const onOverallBudgetSubmit: SubmitHandler<OverallBudgetFormData> = async (data) => {
     setIsSubmittingOverall(true);
     const toastId = toast.loading("Saving overall budget...");
+    
+    const recurrenceRule = 'FREQ=MONTHLY;INTERVAL=1';
+
     const payload: WebAppSetOverallBudgetPayload = {
       amount: data.amount,
       period: 'monthly',
       year: period.year,
       month: period.month,
       notes: overallBudget?.notes || null,
+      isRecurring: data.isRecurring,
+      recurrenceRule: data.isRecurring ? recurrenceRule : undefined,
     };
+    
     try {
-      const response = await fetch('/api/budgets/overall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch('/api/budgets/overall', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      });
       const result = await response.json();
       toast.dismiss(toastId);
       if (!response.ok) throw new Error(result.error || "Failed to save overall budget");
-      const updatedBudget = result.data as WebAppBudget;
-      setOverallBudget(updatedBudget);
-      resetOverallForm({
-          amount: updatedBudget.amount,
-      });
-      toast.success("Overall budget saved!");
+      
+      toast.success(`Overall budget saved!`);
+      await fetchBudgetDataForPeriod(period.year, period.month);
+
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
     } finally {
@@ -238,7 +253,8 @@ export default function BudgetsClientPage({
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0 pt-4">
-                  <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="flex items-start gap-2">
+                  <form onSubmit={handleOverallSubmit(onOverallBudgetSubmit)} className="space-y-4">
+                    <div className="flex items-start gap-2">
                       <div className="flex-grow space-y-1.5">
                           <Controller
                               name="amount"
@@ -266,23 +282,32 @@ export default function BudgetsClientPage({
                           {isSubmittingOverall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                           {overallBudget ? 'Update' : 'Set'}
                       </Button>
-                  </form>
-                  <div className="mt-6 pt-8 border-t">
+                    </div>
+                    
+                    {/* Recurring Toggle Section */}
+                    <div className="border-t pt-4">
                       <div className="flex items-center justify-between">
                           <Label htmlFor="recurring-budget" className="flex items-center gap-2 cursor-pointer">
                               <Repeat className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm font-medium">Set Recurring</span>
                           </Label>
-                          <Switch
-                              id="recurring-budget"
-                              checked={isRecurring}
-                              onCheckedChange={setIsRecurring}
+                          <Controller
+                              name="isRecurring"
+                              control={overallControl}
+                              render={({ field }) => (
+                                  <Switch
+                                      id="recurring-budget"
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                  />
+                              )}
                           />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1.5">
                           Apply this budget amount to future months automatically.
                       </p>
-                  </div>
+                    </div>
+                  </form>
                 </CardContent>
             </div>
             
@@ -326,7 +351,7 @@ export default function BudgetsClientPage({
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Youve used {((overallBudget.spentAmount / overallBudget.amount) * 100).toFixed(0)}% of your budget.
+                    You've used {((overallBudget.spentAmount / overallBudget.amount) * 100).toFixed(0)}% of your budget.
                   </p>
                 </div>
               )}

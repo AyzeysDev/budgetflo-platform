@@ -1,7 +1,7 @@
 // apps/web/src/app/(app)/budgets/BudgetForm.tsx
 "use client";
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -25,28 +25,67 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { WebAppBudget, WebAppCategory, WebAppCreateBudgetPayload, WebAppUpdateBudgetPayload } from '@/types/budget';
-import { Loader2, DollarSign, CalendarDays, Tag, Info, Save } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Loader2, DollarSign, CalendarDays, Tag, Info, Save, CalendarIcon, Repeat } from 'lucide-react';
 import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
+import { format } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import type { WebAppBudget, WebAppCategory, WebAppCreateBudgetPayload, WebAppUpdateBudgetPayload } from '@/types/budget';
 
 const budgetFormSchema = z.object({
-  name: z.string().min(1, "Budget name is required").max(150, "Name too long"),
-  categoryId: z.string().min(1, "Category is required"),
-  amount: z.coerce
-    .number({invalid_type_error: "Amount must be a valid number."})
-    .min(0.01, "Amount must be greater than 0."),
-  notes: z.string().max(500, "Notes too long").optional().nullable(),
+  name: z.string().min(1, "Budget name is required").max(150, "Budget name must be less than 150 characters"),
+  categoryId: z.string().nullable(),
+  amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
+  period: z.enum(['monthly', 'yearly', 'custom']),
+  startDate: z.date({
+    required_error: "Start date is required",
+  }),
+  endDate: z.date({
+    required_error: "End date is required",
+  }),
+  notes: z.string().nullable().optional(),
+  isRecurring: z.boolean(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
+  interval: z.coerce.number().min(1),
+  recurringEndDate: z.date().nullable().optional(),
+}).refine((data) => data.endDate >= data.startDate, {
+  message: "End date must be after start date",
+  path: ["endDate"],
 });
 
 type BudgetFormData = z.infer<typeof budgetFormSchema>;
 
 interface BudgetFormProps {
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  budgetToEdit: WebAppBudget | null;
+  onOpenChange: (open: boolean) => void;
+  budgetToEdit?: WebAppBudget | null;
   onSaveSuccess: () => void;
   budgetableCategories: WebAppCategory[];
-  currentPeriod: { year: number; month: number };
+}
+
+// Helper function to generate RRULE string
+function generateRRule(frequency: string, interval: number, endDate?: Date | null): string {
+  const parts: string[] = [`FREQ=${frequency}`];
+  
+  if (interval > 1) {
+    parts.push(`INTERVAL=${interval}`);
+  }
+  
+  if (endDate) {
+    // Format as YYYYMMDD for RRULE
+    const year = endDate.getFullYear();
+    const month = String(endDate.getMonth() + 1).padStart(2, '0');
+    const day = String(endDate.getDate()).padStart(2, '0');
+    parts.push(`UNTIL=${year}${month}${day}`);
+  }
+  
+  return parts.join(';');
 }
 
 export default function BudgetForm({
@@ -55,161 +94,146 @@ export default function BudgetForm({
   budgetToEdit,
   onSaveSuccess,
   budgetableCategories,
-  currentPeriod,
 }: BudgetFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const {
     control,
-    register,
     handleSubmit,
     reset,
-    setValue,
     watch,
-    formState: { errors, isSubmitting, isDirty, isValid },
+    formState: { errors },
   } = useForm<BudgetFormData>({
     resolver: zodResolver(budgetFormSchema),
-    mode: 'onChange',
     defaultValues: {
-      name: '',
-      categoryId: '',
-      amount: undefined,
-      notes: '',
+      name: budgetToEdit?.name || '',
+      categoryId: budgetToEdit?.categoryId || null,
+      amount: budgetToEdit?.amount || undefined,
+      period: (budgetToEdit?.period as 'monthly' | 'yearly' | 'custom') || 'monthly',
+      startDate: budgetToEdit?.startDate ? new Date(budgetToEdit.startDate) : new Date(),
+      endDate: budgetToEdit?.endDate ? new Date(budgetToEdit.endDate) : new Date(),
+      notes: budgetToEdit?.notes || '',
+      isRecurring: false,
+      frequency: 'MONTHLY',
+      interval: 1,
+      recurringEndDate: null,
     },
   });
 
-  const watchedCategoryId = watch('categoryId');
+  const isRecurring = watch('isRecurring');
+  const selectedCategoryId = watch('categoryId');
 
-  const selectedPeriodDisplay = useMemo(() => {
-    const date = new Date(currentPeriod.year, currentPeriod.month - 1, 1);
-    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
-  }, [currentPeriod]);
-
-  const selectedCategoryForName = useMemo(() => {
-    return budgetableCategories.find(cat => cat.id === watchedCategoryId);
-  }, [watchedCategoryId, budgetableCategories]);
-
-
-  useEffect(() => {
-    if (isOpen) {
-      if (budgetToEdit) {
-        reset({
-          name: budgetToEdit.name || `${budgetableCategories.find(c=>c.id === budgetToEdit.categoryId)?.name || 'Category'} Budget - ${selectedPeriodDisplay}`,
-          categoryId: budgetToEdit.categoryId || '',
-          amount: budgetToEdit.amount,
-          notes: budgetToEdit.notes || '',
-        });
-      } else {
-        const defaultCategory = budgetableCategories.length > 0 ? budgetableCategories[0] : null;
-        reset({
-          name: defaultCategory ? `${defaultCategory.name} Budget - ${selectedPeriodDisplay}` : `New Budget - ${selectedPeriodDisplay}`,
-          categoryId: defaultCategory?.id || '',
-          amount: undefined,
-          notes: '',
-        });
-      }
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      reset();
     }
-  }, [budgetToEdit, isOpen, reset, budgetableCategories, selectedPeriodDisplay]);
+    onOpenChange(open);
+  };
 
-  useEffect(() => {
-    if (isOpen && !budgetToEdit && selectedCategoryForName) {
-      setValue('name', `${selectedCategoryForName.name} Budget - ${selectedPeriodDisplay}`, { shouldDirty: true, shouldValidate: true });
-    } else if (isOpen && !budgetToEdit && !selectedCategoryForName && !watch('name')?.includes(selectedPeriodDisplay)) {
-      setValue('name', `New Budget - ${selectedPeriodDisplay}`, { shouldDirty: true, shouldValidate: true });
-    }
-  }, [watchedCategoryId, selectedCategoryForName, budgetToEdit, isOpen, setValue, selectedPeriodDisplay, watch]);
-
-
-  const onSubmitHandler: SubmitHandler<BudgetFormData> = async (data) => {
-    const startDate = new Date(currentPeriod.year, currentPeriod.month - 1, 1).toISOString();
-    const endDate = new Date(currentPeriod.year, currentPeriod.month, 0, 23, 59, 59, 999).toISOString();
-
-    const apiPayload: WebAppCreateBudgetPayload | WebAppUpdateBudgetPayload = {
-      name: data.name,
-      categoryId: data.categoryId,
-      amount: data.amount,
-      period: 'monthly',
-      startDate,
-      endDate,
-      isOverall: false,
-      notes: data.notes || null,
-    };
-
-    const urlBase = `/api/budgets`;
-    const url = budgetToEdit ? `${urlBase}/${budgetToEdit.id}` : urlBase;
-    const method = budgetToEdit ? 'PUT' : 'POST';
-
-    const toastId = `budget-form-${budgetToEdit?.id || 'new'}`;
-    toast.loading(budgetToEdit ? "Updating budget..." : "Creating budget...", { id: toastId });
+  const onSubmit: SubmitHandler<BudgetFormData> = async (data) => {
+    setIsSubmitting(true);
+    const toastId = toast.loading(budgetToEdit ? "Updating budget..." : "Creating budget...");
 
     try {
-      const response = await fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(apiPayload),
-      });
-      const result = await response.json();
+      const payload: WebAppCreateBudgetPayload = {
+        name: data.name,
+        categoryId: data.categoryId,
+        amount: data.amount,
+        period: data.period,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+        isOverall: false,
+        notes: data.notes || null,
+        isRecurring: data.isRecurring,
+        recurrenceRule: data.isRecurring 
+          ? generateRRule(data.frequency, data.interval, data.recurringEndDate)
+          : undefined,
+      };
 
-      toast.dismiss(toastId);
+      const url = budgetToEdit ? `/api/budgets/${budgetToEdit.id}` : '/api/budgets';
+      const method = budgetToEdit ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      
       if (!response.ok) {
-        throw new Error(result.error || result.errors?.[0]?.msg || "Failed to save budget");
+        throw new Error(result.error || `Failed to ${budgetToEdit ? 'update' : 'create'} budget`);
       }
-      toast.success(`Budget "${result.data.name}" ${budgetToEdit ? 'updated' : 'created'}!`);
+
+      toast.success(
+        budgetToEdit 
+          ? "Budget updated successfully!" 
+          : `Budget created successfully!${data.isRecurring ? ' It will repeat according to your schedule.' : ''}`,
+        { id: toastId }
+      );
+
       onSaveSuccess();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (error) {
       toast.error((error as Error).message, { id: toastId });
-      console.error("Budget form error:", error);
-    }
-  };
-  
-  const handleDialogClose = () => {
-    if (!isSubmitting) {
-        onOpenChange(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="text-xl font-semibold">
-            {budgetToEdit ? 'Edit Category Budget' : 'Create New Category Budget'}
-          </DialogTitle>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>{budgetToEdit ? 'Edit Budget' : 'Create New Budget'}</DialogTitle>
           <DialogDescription>
-            Set a specific budget for a category for {selectedPeriodDisplay}.
+            {budgetToEdit 
+              ? 'Update your budget details.' 
+              : 'Set up a new budget for a category. You can make it recurring to apply automatically.'}
           </DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmitHandler)} className="p-6 space-y-5">
+        
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Budget Name */}
           <div>
-            <Label htmlFor="categoryId" className="flex items-center gap-1.5 mb-1.5">
-              <Tag className="w-4 h-4 text-muted-foreground" /> Category
-            </Label>
+            <Label htmlFor="name">Budget Name</Label>
+            <Controller
+              name="name"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  id="name"
+                  placeholder="e.g., Monthly Groceries"
+                  {...field}
+                  className={cn(errors.name && "border-destructive")}
+                />
+              )}
+            />
+            {errors.name && (
+              <p className="text-xs text-destructive mt-1">{errors.name.message}</p>
+            )}
+          </div>
+
+          {/* Category Selection */}
+          <div>
+            <Label htmlFor="category">Category</Label>
             <Controller
               name="categoryId"
               control={control}
               render={({ field }) => (
                 <Select
-                  onValueChange={(value) => {
-                    field.onChange(value);
-                    if (!budgetToEdit) {
-                      const cat = budgetableCategories.find(c => c.id === value);
-                      if (cat) {
-                        setValue('name', `${cat.name} Budget - ${selectedPeriodDisplay}`, { shouldDirty: true, shouldValidate: true });
-                      }
-                    }
-                  }}
-                  value={field.value}
-                  disabled={isSubmitting || !!budgetToEdit}
+                  onValueChange={field.onChange}
+                  value={field.value || undefined}
                 >
-                  <SelectTrigger id="categoryId" className="h-10">
+                  <SelectTrigger id="category" className={cn(errors.categoryId && "border-destructive")}>
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {budgetableCategories.map(cat => (
-                      <SelectItem key={cat.id} value={cat.id}>
+                    {budgetableCategories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
                         <div className="flex items-center gap-2">
-                          <IconRenderer name={cat.icon as AvailableIconName} size={16} color={cat.color || undefined} />
-                          {cat.name}
+                          <IconRenderer name={category.icon as AvailableIconName} size={16} color={category.color || undefined} />
+                          {category.name}
                         </div>
                       </SelectItem>
                     ))}
@@ -217,92 +241,249 @@ export default function BudgetForm({
                 </Select>
               )}
             />
-            {errors.categoryId && <p className="text-xs text-destructive mt-1">{errors.categoryId.message}</p>}
-            {budgetToEdit && <p className="text-xs text-muted-foreground mt-1">Category cannot be changed when editing.</p>}
+            {errors.categoryId && (
+              <p className="text-xs text-destructive mt-1">{errors.categoryId.message}</p>
+            )}
           </div>
 
+          {/* Amount */}
           <div>
-            <Label htmlFor="name" className="flex items-center gap-1.5 mb-1.5">
-              <Info className="w-4 h-4 text-muted-foreground" /> Budget Name
-            </Label>
-            <Input
-              id="name"
-              {...register('name')}
-              placeholder={`e.g., Groceries - ${selectedPeriodDisplay}`}
-              className="h-10"
-              disabled={isSubmitting}
+            <Label htmlFor="amount">Amount</Label>
+            <Controller
+              name="amount"
+              control={control}
+              render={({ field }) => (
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    {...field}
+                    className={cn("pl-9", errors.amount && "border-destructive")}
+                  />
+                </div>
+              )}
             />
-            {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+            {errors.amount && (
+              <p className="text-xs text-destructive mt-1">{errors.amount.message}</p>
+            )}
           </div>
 
-          <div>
-            <Label htmlFor="amount" className="flex items-center gap-1.5 mb-1.5">
-              <DollarSign className="w-4 h-4 text-muted-foreground" /> Budgeted Amount
-            </Label>
-             <Controller
-                name="amount"
+          {/* Period and Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="startDate">Start Date</Label>
+              <Controller
+                name="startDate"
                 control={control}
                 render={({ field }) => (
-                    <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                            id="amount"
-                            type="text"
-                            inputMode="decimal"
-                            step="0.01"
-                            {...field}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                field.onChange(val);
-                            }}
-                            value={field.value === undefined ? '' : String(field.value)}
-                            placeholder="0.00"
-                            className="pl-9 h-10"
-                            disabled={isSubmitting}
-                        />
-                    </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="startDate"
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground",
+                          errors.startDate && "border-destructive"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 )}
-            />
-            {errors.amount && <p className="text-xs text-destructive mt-1">{errors.amount.message}</p>}
+              />
+              {errors.startDate && (
+                <p className="text-xs text-destructive mt-1">{errors.startDate.message}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="endDate">End Date</Label>
+              <Controller
+                name="endDate"
+                control={control}
+                render={({ field }) => (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="endDate"
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground",
+                          errors.endDate && "border-destructive"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+              />
+              {errors.endDate && (
+                <p className="text-xs text-destructive mt-1">{errors.endDate.message}</p>
+              )}
+            </div>
           </div>
-          
+
+          {/* Notes */}
           <div>
-            <Label htmlFor="periodDisplay" className="flex items-center gap-1.5 mb-1.5">
-                <CalendarDays className="w-4 h-4 text-muted-foreground" /> Period
-            </Label>
-            <Input
-                id="periodDisplay"
-                value={selectedPeriodDisplay}
-                readOnly
-                disabled
-                className="h-10 bg-muted/50 cursor-not-allowed border-dashed"
+            <Label htmlFor="notes">Notes (Optional)</Label>
+            <Controller
+              name="notes"
+              control={control}
+              render={({ field }) => (
+                <Textarea
+                  id="notes"
+                  placeholder="Add any notes about this budget"
+                  className="resize-none"
+                  {...field}
+                  value={field.value || ''}
+                />
+              )}
             />
           </div>
 
-          <div>
-            <Label htmlFor="notes" className="flex items-center gap-1.5 mb-1.5">
-              <Info className="w-4 h-4 text-muted-foreground" /> Notes (Optional)
-            </Label>
-            <Textarea
-              id="notes"
-              {...register('notes')}
-              placeholder="Any specific details for this budget..."
-              rows={3}
+          {/* Recurring Toggle */}
+          {!budgetToEdit && (
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="recurring" className="flex items-center gap-2 cursor-pointer">
+                  <Repeat className="h-4 w-4 text-muted-foreground" />
+                  <span>Make this budget recurring</span>
+                </Label>
+                <Controller
+                  name="isRecurring"
+                  control={control}
+                  render={({ field }) => (
+                    <Switch
+                      id="recurring"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  )}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Automatically create this budget for future periods
+              </p>
+
+              {/* Recurrence Options */}
+              {isRecurring && (
+                <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="interval" className="text-xs">Repeat every</Label>
+                      <Controller
+                        name="interval"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            id="interval"
+                            type="number"
+                            min="1"
+                            {...field}
+                          />
+                        )}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="frequency" className="text-xs">Frequency</Label>
+                      <Controller
+                        name="frequency"
+                        control={control}
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger id="frequency">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="DAILY">Day(s)</SelectItem>
+                              <SelectItem value="WEEKLY">Week(s)</SelectItem>
+                              <SelectItem value="MONTHLY">Month(s)</SelectItem>
+                              <SelectItem value="YEARLY">Year(s)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="recurringEndDate" className="text-xs">End Date (Optional)</Label>
+                    <Controller
+                      name="recurringEndDate"
+                      control={control}
+                      render={({ field }) => (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              id="recurringEndDate"
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {field.value ? format(field.value, 'PPP') : 'No end date'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={(date) => field.onChange(date || null)}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
               disabled={isSubmitting}
-            />
-            {errors.notes && <p className="text-xs text-destructive mt-1">{errors.notes.message}</p>}
-          </div>
-
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={handleDialogClose} disabled={isSubmitting}>
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !isDirty || !isValid}>
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Save className="mr-2 h-4 w-4" />
-              {budgetToEdit ? 'Save Changes' : 'Create Budget'}
+              {budgetToEdit ? 'Update Budget' : 'Create Budget'}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
