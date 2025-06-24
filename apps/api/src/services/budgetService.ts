@@ -324,13 +324,19 @@ export async function updateBudget(budgetId: string, userId: string, payload: Up
           });
         } else {
           // Create new recurring rule
-          const startDate = dataToUpdate.startDate ? (dataToUpdate.startDate as Timestamp).toDate() : (existingBudget.startDate as Timestamp).toDate();
+          // Use the budget's start date for the recurring rule to ensure proper RRule evaluation
+          const budgetStartDate = dataToUpdate.startDate ? (dataToUpdate.startDate as Timestamp).toDate() : (existingBudget.startDate as Timestamp).toDate();
+          
+          // For category budgets, use the first day of the budget's month as the recurring start date
+          // This ensures the RRule starts from the correct month
+          const recurringStartDate = new Date(Date.UTC(budgetStartDate.getUTCFullYear(), budgetStartDate.getUTCMonth(), 1));
+          
           const newRecurringBudget = await createRecurringBudget(userId, {
             name: payload.name || existingBudget.name,
             categoryId: existingBudget.categoryId,
             amount: payload.amount || existingBudget.amount,
             recurrenceRule: payload.recurrenceRule,
-            startDate: startDate.toISOString(),
+            startDate: recurringStartDate.toISOString(),
             endDate: null,
             isOverall: existingBudget.isOverall || false,
             notes: payload.notes !== undefined ? payload.notes : existingBudget.notes,

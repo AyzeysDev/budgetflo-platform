@@ -12,7 +12,7 @@ import {
   ArrowLeft,
   DollarSign,
   Save,
-  Trash2,
+
   Settings2,
   Repeat
 } from 'lucide-react';
@@ -57,7 +57,6 @@ interface CategoryBudgetRowProps {
   category: WebAppCategory;
   budget: WebAppBudget | undefined;
   onSave: (categoryId: string, amount: number) => Promise<void>;
-  onDelete: (budget: WebAppBudget) => void;
   onSetRecurring: (categoryId: string, isRecurring: boolean) => Promise<void>;
   isSaving: boolean;
   currentPeriod: { year: number; month: number };
@@ -69,7 +68,7 @@ function generateMonthlyRRule(): string {
 }
 
 // Sub-component for managing a single category's budget inline
-function CategoryBudgetRow({ category, budget, onSave, onDelete, onSetRecurring, isSaving, currentPeriod }: CategoryBudgetRowProps) {
+function CategoryBudgetRow({ category, budget, onSave, onSetRecurring, isSaving, currentPeriod }: CategoryBudgetRowProps) {
   const [amountInput, setAmountInput] = useState<string>(budget?.amount?.toString() || '');
   const [inputError, setInputError] = useState<string | null>(null);
   const [showRecurringDialog, setShowRecurringDialog] = useState(false);
@@ -184,14 +183,6 @@ function CategoryBudgetRow({ category, budget, onSave, onDelete, onSetRecurring,
             </>
           )}
         </div>
-        {isBudgetSet && (
-          <div className="flex items-center gap-1 self-start sm:self-center">
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(budget)} disabled={isSaving}>
-              <Trash2 className="w-4" />
-              <span className="sr-only">Delete Budget</span>
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Recurring Confirmation Dialog */}
@@ -222,7 +213,7 @@ export default function CategoryBudgetsClientPage({
 }: CategoryBudgetsClientPageProps) {
   const [period, setPeriod] = useState({ year: initialYear, month: initialMonth });
   const [categoryBudgets, setCategoryBudgets] = useState<WebAppBudget[]>(initialCategoryBudgets);
-  const [budgetToDelete, setBudgetToDelete] = useState<WebAppBudget | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingCategory, setIsSavingCategory] = useState<string | null>(null);
   const [showGlobalRecurringDialog, setShowGlobalRecurringDialog] = useState(false);
@@ -380,27 +371,7 @@ export default function CategoryBudgetsClientPage({
     }
   };
   
-  const handleDeleteConfirm = async () => {
-    if (!budgetToDelete) return;
-    const toastId = toast.loading(`Deleting budget...`);
-    setIsSavingCategory(budgetToDelete.categoryId);
-    try {
-      const response = await fetch(`/api/budgets/${budgetToDelete.id}`, { method: 'DELETE' });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({error: 'Failed to delete budget.'}));
-        throw new Error(errorData.error || 'Operation failed');
-      }
 
-      toast.success(`Budget "${budgetToDelete.name}" deleted successfully.`, { id: toastId });
-      fetchBudgetDataForPeriod(period.year, period.month);
-    } catch (error) {
-      toast.error((error as Error).message, { id: toastId });
-    } finally {
-      setBudgetToDelete(null);
-      setIsSavingCategory(null);
-    }
-  };
 
   const changeMonth = (direction: 'next' | 'prev') => {
     setPeriod(current => {
@@ -470,7 +441,7 @@ export default function CategoryBudgetsClientPage({
                                 category={category}
                                 budget={categoryBudgets.find(b => b.categoryId === category.id)}
                                 onSave={handleSaveCategoryBudget}
-                                onDelete={setBudgetToDelete}
+
                                 onSetRecurring={handleSetRecurring}
                                 isSaving={isSavingCategory === category.id}
                                 currentPeriod={period}
@@ -541,26 +512,7 @@ export default function CategoryBudgetsClientPage({
         </div>
       </div>
 
-      {/* Delete Budget Dialog */}
-      {budgetToDelete && (
-        <Dialog open={!!budgetToDelete} onOpenChange={() => setBudgetToDelete(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-destructive/10 flex items-center justify-center">
-                <AlertCircle className="h-6 w-6 text-destructive"/>
-              </div>
-              <DialogTitle>Delete Budget</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete the budget for &quot;{budgetToDelete.name}&quot;? This cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setBudgetToDelete(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+
 
       {/* Global Set Recurring Confirmation Dialog */}
       <AlertDialog open={showGlobalRecurringDialog} onOpenChange={setShowGlobalRecurringDialog}>
