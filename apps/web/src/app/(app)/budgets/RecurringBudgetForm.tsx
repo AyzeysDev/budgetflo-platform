@@ -173,7 +173,7 @@ export default function RecurringBudgetForm({
         const parsedRule = parseRRule(budgetToEdit.recurrenceRule);
         reset({
           name: budgetToEdit.name,
-          categoryId: budgetToEdit.categoryId,
+          categoryId: budgetToEdit.categoryId ?? '',
           amount: budgetToEdit.amount,
           frequency: parsedRule.frequency || 'MONTHLY',
           interval: parsedRule.interval || 1,

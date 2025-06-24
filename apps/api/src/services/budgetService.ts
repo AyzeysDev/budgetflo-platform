@@ -356,7 +356,8 @@ export async function setOverallBudget(
     if (payload.amount <= 0) {
         throw new Error("Overall budget amount must be positive.");
     }
-
+    
+    // FIX: Use UTC for all date calculations to avoid timezone bugs.
     let startDate: Date;
     let endDate: Date;
     let budgetName: string;
@@ -365,9 +366,10 @@ export async function setOverallBudget(
         if (payload.month === undefined || payload.month < 1 || payload.month > 12) {
             throw new Error("Month is required for monthly overall budget.");
         }
-        startDate = new Date(payload.year, payload.month - 1, 1);
-        endDate = new Date(payload.year, payload.month, 0, 23, 59, 59, 999);
-        budgetName = `Overall Budget - ${startDate.toLocaleString('default', { month: 'long' })} ${payload.year}`;
+        startDate = new Date(Date.UTC(payload.year, payload.month - 1, 1));
+        const endOfMonth = new Date(Date.UTC(payload.year, payload.month, 0));
+        endDate = new Date(Date.UTC(payload.year, payload.month - 1, endOfMonth.getUTCDate(), 23, 59, 59, 999));
+        budgetName = `Overall Budget - ${new Date(payload.year, payload.month - 1).toLocaleString('default', { month: 'long' })} ${payload.year}`;
     } else {
         throw new Error("Only monthly budgets are supported at this time.");
     }

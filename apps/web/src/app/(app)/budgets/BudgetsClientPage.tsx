@@ -52,7 +52,7 @@ const overallBudgetFormSchema = z.object({
         invalid_type_error: "Budget amount must be a valid number."
     })
     .min(0.01, "Amount must be greater than 0."),
-  isRecurring: z.boolean().default(false),
+  isRecurring: z.boolean(),
 });
 
 type OverallBudgetFormData = z.infer<typeof overallBudgetFormSchema>;
