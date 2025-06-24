@@ -262,10 +262,14 @@ export async function getTransactionsByUserId(userId: string, filters: { year?: 
 
     if (filters.year && filters.month) {
         const year = parseInt(filters.year, 10);
-        const month = parseInt(filters.month, 10) -1;
-        const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-        query = query.where('date', '>=', startDate).where('date', '<=', endDate);
+        const month = parseInt(filters.month, 10);
+        // Use UTC dates for consistent filtering
+        const startDate = new Date(Date.UTC(year, month - 1, 1));
+        const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+        // Convert to Firestore Timestamps
+        const startTimestamp = Timestamp.fromDate(startDate);
+        const endTimestamp = Timestamp.fromDate(endDate);
+        query = query.where('date', '>=', startTimestamp).where('date', '<=', endTimestamp);
     }
 
     if (filters.categoryId) {

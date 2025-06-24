@@ -879,11 +879,12 @@ export async function getMonthlyBudget(
         // Parse RRULE and check if it occurs in this month
         const rule = RRule.fromString(budget.recurrenceRule);
         
-        const occurrences = rule.between(monthStart, monthEnd, true);
+        // Follow the exact same pattern as overall budget recurring logic
+        const nextOccurrence = rule.after(new Date(Date.UTC(year, month - 1, 0)), true);
         
-        if (occurrences.length > 0 && budget.categoryId && !budget.isOverall) {
+        if (nextOccurrence && nextOccurrence.getUTCFullYear() === year && nextOccurrence.getUTCMonth() === (month - 1) && budget.categoryId && !budget.isOverall) {
           // Budget is active this month
-          const budgetAmount = budget.amount * occurrences.length;
+          const budgetAmount = budget.amount;
           
           // If category already has a regular budget, add to it
           if (categoryBreakdown[budget.categoryId]) {
@@ -958,12 +959,28 @@ export async function getCategoryBudgetsForPeriod(
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
     
+    // Get all transactions for this month once to calculate spent amounts efficiently
+    const transactions = await getTransactionsByUserId(userId, {
+      year: year.toString(),
+      month: month.toString()
+    });
+    
     const budgetMap = new Map<string, BudgetDTO>();
     
-    // Add regular budgets to the map
+    // Add regular budgets to the map and recalculate their spent amounts for this month
     for (const budget of regularBudgets) {
       if (budget.categoryId) {
-        budgetMap.set(budget.categoryId, budget);
+        // Recalculate spent amount for this specific month
+        const categoryTransactions = transactions.filter(t => 
+          t.type === 'expense' && t.categoryId === budget.categoryId
+        );
+        const spentAmount = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+        
+        // Update the budget with the correct spent amount for this month
+        budgetMap.set(budget.categoryId, {
+          ...budget,
+          spentAmount: spentAmount
+        });
       }
     }
     
@@ -1005,19 +1022,14 @@ export async function getCategoryBudgetsForPeriod(
         
         const rrule = new RRule(ruleOptions);
         
-        // Check if this recurring budget applies to the current month
-        const occurrences = rrule.between(monthStart, monthEnd, true);
+        // Follow the exact same pattern as overall budget recurring logic
+        const nextOccurrence = rrule.after(new Date(Date.UTC(year, month - 1, 0)), true);
         
-        if (occurrences.length > 0) {
+        if (nextOccurrence && nextOccurrence.getUTCFullYear() === year && nextOccurrence.getUTCMonth() === (month - 1)) {
           // This recurring budget applies to this month
           // If there's no regular budget for this category, create a virtual one from the recurring budget
           if (!budgetMap.has(recurringBudget.categoryId)) {
-            // Get transactions for this category in this month to calculate spent amount
-            const transactions = await getTransactionsByUserId(userId, {
-              year: year.toString(),
-              month: month.toString()
-            });
-            
+            // Calculate spent amount for this category using the transactions we already fetched
             const categoryTransactions = transactions.filter(t => 
               t.type === 'expense' && t.categoryId === recurringBudget.categoryId
             );
