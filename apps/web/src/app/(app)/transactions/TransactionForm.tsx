@@ -32,22 +32,17 @@ import { Calendar } from "@/components/ui/calendar";
 import { WebAppTransaction, WebAppCreateTransactionPayload, WebAppUpdateTransactionPayload } from '@/types/transaction';
 import { WebAppAccount } from '@/types/account';
 import { WebAppCategory } from '@/types/budget';
-import { WebAppGoal } from '@/types/goal';
-import { WebAppLoanTracker } from '@/types/tracker';
-import { Loader2, CalendarIcon, ArrowLeftRight, Tag, Landmark, FileText, DollarSign, Link2 } from 'lucide-react';
+import { Loader2, CalendarIcon, ArrowLeftRight, Tag, Landmark, FileText, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
-import useSWR, { mutate } from 'swr';
-
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+import { mutate } from 'swr';
 
 const transactionFormSchema = z.object({
   date: z.date({ required_error: "A transaction date is required." }),
   amount: z.coerce.number({ invalid_type_error: "Amount must be a number." }).min(0.01, "Amount must be greater than 0."),
   type: z.enum(['income', 'expense']),
   accountId: z.string().min(1, "An account is required."),
-  categoryId: z.string({ required_error: "A category is required."}).min(1, "A category is required."),
-  linkedEntity: z.string().optional().nullable(),
+  categoryId: z.string().optional().nullable(),
 });
 
 type TransactionFormData = z.infer<typeof transactionFormSchema>;
@@ -73,9 +68,6 @@ export default function TransactionForm({
   onFormSubmitSuccess,
   prefillData,
 }: TransactionFormProps) {
-  const { data: goals, isLoading: isLoadingGoals } = useSWR<WebAppGoal[]>('/api/goals?isActive=true', fetcher);
-  const { data: loans, isLoading: isLoadingLoans } = useSWR<WebAppLoanTracker[]>('/api/trackers/loans?isActive=true', fetcher);
-  
   const {
     control,
     register,
@@ -98,9 +90,6 @@ export default function TransactionForm({
 
   useEffect(() => {
     if (isOpen) {
-      const linkedEntityValue = transactionToEdit?.linkedGoalId ? `goal_${transactionToEdit.linkedGoalId}` 
-                              : transactionToEdit?.linkedLoanTrackerId ? `loan_${transactionToEdit.linkedLoanTrackerId}`
-                              : 'none';
       if (transactionToEdit) {
         reset({
           date: new Date(transactionToEdit.date),
@@ -108,7 +97,6 @@ export default function TransactionForm({
           type: transactionToEdit.type,
           accountId: transactionToEdit.accountId,
           categoryId: transactionToEdit.categoryId,
-          linkedEntity: linkedEntityValue
         });
       } else {
         reset({
@@ -117,8 +105,6 @@ export default function TransactionForm({
           type: prefillData?.type || 'expense',
           accountId: prefillData?.accountId || accounts[0]?.accountId || '',
           categoryId: prefillData?.categoryId || '', // Do not pre-select a category
-          description: prefillData?.description || '',
-          linkedEntity: prefillData?.linkedGoalId ? `goal_${prefillData.linkedGoalId}` : prefillData?.linkedLoanTrackerId ? `loan_${prefillData.linkedLoanTrackerId}` : 'none',
         });
       }
     }
@@ -127,33 +113,16 @@ export default function TransactionForm({
   const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense'), [categories]);
   const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income'), [categories]);
 
-  const onSubmitHandler: SubmitHandler<TransactionFormData> = async (data) => {
-    const { linkedEntity, ...restOfData } = data;
-    let linkedGoalId: string | undefined;
-    let linkedLoanTrackerId: string | undefined;
-    let source: WebAppCreateTransactionPayload['source'] = 'user_manual';
-
-    if(linkedEntity && linkedEntity !== 'none') {
-      const [type, id] = linkedEntity.split('_');
-      if (type === 'goal') {
-        linkedGoalId = id;
-        source = 'goal_contribution';
-      } else if (type === 'loan') {
-        linkedLoanTrackerId = id;
-        source = 'loan_payment';
-      }
-    }
-
-    const payload: WebAppCreateTransactionPayload | WebAppUpdateTransactionPayload = {
-      ...restOfData,
-      date: data.date.toISOString(),
-      amount: Number(data.amount),
-      description: '',
-      categoryId: data.type === 'income' ? (data.categoryId || null) : data.categoryId,
-      linkedGoalId,
-      linkedLoanTrackerId,
-      source,
-    };
+      const onSubmitHandler: SubmitHandler<TransactionFormData> = async (data) => {
+      const payload: WebAppCreateTransactionPayload | WebAppUpdateTransactionPayload = {
+        date: data.date.toISOString(),
+        amount: Number(data.amount),
+        type: data.type,
+        accountId: data.accountId,
+        description: '',
+        categoryId: data.categoryId || undefined,
+        source: 'user_manual',
+      };
     
     const url = transactionToEdit
       ? `/api/transactions/${transactionToEdit.transactionId}`
@@ -176,9 +145,6 @@ export default function TransactionForm({
       mutate('/api/transactions');
       mutate('/api/accounts');
       mutate('/api/budgets/overall');
-      mutate('/api/goals');
-      mutate('/api/trackers/loans');
-      mutate('/api/trackers/savings');
       
       onFormSubmitSuccess();
       onOpenChange(false);
@@ -196,7 +162,7 @@ export default function TransactionForm({
             {transactionToEdit ? 'Edit Transaction' : 'Add Transaction'}
           </DialogTitle>
           <DialogDescription>
-            Log a new income or expense. Link it to a goal or loan to keep everything in sync.
+            Log a new income or expense transaction.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmitHandler)} className="px-6 pb-6 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -259,21 +225,6 @@ export default function TransactionForm({
               </Select>
             )} />
             {errors.categoryId && <p className="text-xs text-destructive">{errors.categoryId.message}</p>}
-          </div>
-
-          {/* Link to Goal/Loan */}
-          <div className="space-y-1.5">
-            <Label htmlFor="linkedEntity" className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-muted-foreground"/> Link to (Optional)</Label>
-            <Controller name="linkedEntity" control={control} render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''} disabled={isLoadingGoals || isLoadingLoans || !!prefillData?.linkedGoalId || !!prefillData?.linkedLoanTrackerId}>
-                <SelectTrigger id="linkedEntity"><SelectValue placeholder="Link to a goal or loan..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {goals && goals.length > 0 && <SelectGroup><SelectLabel>Goals</SelectLabel>{goals.map(g => <SelectItem key={g.goalId} value={`goal_${g.goalId}`}>{g.name}</SelectItem>)}</SelectGroup>}
-                  {loans && loans.length > 0 && <SelectGroup><SelectLabel>Loans</SelectLabel>{loans.map(l => <SelectItem key={l.trackerId} value={`loan_${l.trackerId}`}>{l.name}</SelectItem>)}</SelectGroup>}
-                </SelectContent>
-              </Select>
-            )} />
           </div>
           
           <DialogFooter className="pt-4 sticky bottom-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-6 -mx-6 px-6">
