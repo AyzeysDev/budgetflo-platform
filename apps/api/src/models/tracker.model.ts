@@ -53,7 +53,7 @@ export interface SavingsTrackerDTO extends Omit<SavingsTracker, 'createdAt' | 'u
 // Payloads for API requests
 export interface CreateLoanTrackerPayload {
   name: string;
-  linkedAccountId?: string | null;
+  linkedAccountId: string;
   totalAmount: number;
   emiAmount: number;
   interestRate: number;

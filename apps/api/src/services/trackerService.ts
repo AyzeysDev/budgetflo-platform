@@ -173,6 +173,8 @@ async function convertSavingsTrackerToDTO(tracker: SavingsTracker): Promise<Savi
 
 // Create a loan tracker
 export async function createLoanTracker(userId: string, payload: CreateLoanTrackerPayload): Promise<LoanTrackerDTO> {
+  console.log('Creating loan tracker with payload:', { userId, payload });
+  
   const trackersCollection = getLoanTrackersCollection();
   const newTrackerRef = trackersCollection.doc();
   
@@ -180,31 +182,71 @@ export async function createLoanTracker(userId: string, payload: CreateLoanTrack
   const nextDueDate = new Date(startDate);
   nextDueDate.setMonth(nextDueDate.getMonth() + 1);
 
+  let remainingBalance = payload.totalAmount;
+  let paidInstallments = 0;
+
+  // Sync with account balance (linkedAccountId is now required)
+  console.log('Attempting to sync with account:', payload.linkedAccountId);
+  try {
+    const accountDoc = await getAccountsCollection().doc(payload.linkedAccountId).get();
+    console.log('Account doc exists:', accountDoc.exists);
+    
+    if (accountDoc.exists) {
+      const account = accountDoc.data() as Account;
+      console.log('Account data:', account);
+      
+      if (account && typeof account.balance === 'number') {
+        // For liability accounts, balance represents remaining amount owed
+        remainingBalance = account.balance;
+        
+        // Calculate paid installments based on how much has been paid off
+        const amountPaid = payload.totalAmount - remainingBalance;
+        if (amountPaid > 0 && payload.emiAmount > 0) {
+          paidInstallments = Math.floor(amountPaid / payload.emiAmount);
+        }
+        
+        console.log('Successfully synced loan tracker with account balance:', remainingBalance);
+        console.log('Calculated paid installments:', paidInstallments);
+      } else {
+        console.warn('Account balance is not a valid number:', account?.balance);
+      }
+    } else {
+      console.warn('Account document not found for ID:', payload.linkedAccountId);
+    }
+  } catch (error) {
+    console.error('Failed to sync with account during loan tracker creation:', error);
+    // Continue with manual loan tracker creation
+  }
+
   const newTracker: LoanTracker = {
     trackerId: newTrackerRef.id,
     userId,
     name: payload.name,
-    linkedAccountId: payload.linkedAccountId || null,
+    linkedAccountId: payload.linkedAccountId,
     totalAmount: payload.totalAmount,
     emiAmount: payload.emiAmount,
     interestRate: payload.interestRate,
     tenureMonths: payload.tenureMonths,
     startDate: Timestamp.fromDate(startDate),
     nextDueDate: Timestamp.fromDate(nextDueDate),
-    paidInstallments: 0,
-    remainingBalance: payload.totalAmount,
+    paidInstallments,
+    remainingBalance,
     isActive: true,
     createdAt: FieldValue.serverTimestamp() as Timestamp,
     updatedAt: FieldValue.serverTimestamp() as Timestamp,
   };
 
+  console.log('Saving new loan tracker:', newTracker);
   await newTrackerRef.set(newTracker);
   const createdDoc = await newTrackerRef.get();
   const createdData = createdDoc.data();
   if (!createdData) {
     throw new Error("Failed to create loan tracker: document data is empty.");
   }
-  return convertLoanTrackerToDTO(createdData);
+  const result = convertLoanTrackerToDTO(createdData);
+  console.log('Loan tracker created successfully:', result);
+  
+  return result;
 }
 
 // Get all loan trackers for a user
@@ -428,4 +470,53 @@ export function _applySavingsUpdate(t: FirebaseFirestore.Transaction, savingsDoc
   t.update(savingsDoc.ref, {
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+// Add function to sync loan tracker with current account balance
+export async function syncLoanTrackerWithAccount(trackerId: string, userId: string): Promise<LoanTrackerDTO | null> {
+  const trackerRef = getLoanTrackersCollection().doc(trackerId);
+  const trackerDoc = await trackerRef.get();
+
+  if (!trackerDoc.exists) {
+    return null;
+  }
+
+  const tracker = trackerDoc.data() as LoanTracker;
+  
+  if (tracker.userId !== userId) {
+    throw new Error('Unauthorized access to loan tracker');
+  }
+
+  if (!tracker.linkedAccountId) {
+    throw new Error('Loan tracker is not linked to an account');
+  }
+
+  // Get current account balance
+  const accountDoc = await getAccountsCollection().doc(tracker.linkedAccountId).get();
+  if (!accountDoc.exists) {
+    throw new Error('Linked account not found');
+  }
+
+  const account = accountDoc.data() as Account;
+  
+  // Calculate paid installments based on how much has been paid off
+  const amountPaid = tracker.totalAmount - account.balance;
+  let paidInstallments = 0;
+  if (amountPaid > 0 && tracker.emiAmount > 0) {
+    paidInstallments = Math.floor(amountPaid / tracker.emiAmount);
+  }
+
+  const updateData = {
+    remainingBalance: account.balance,
+    paidInstallments: Math.max(0, paidInstallments),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await trackerRef.update(updateData);
+  const updatedDoc = await trackerRef.get();
+  const updatedData = updatedDoc.data();
+  if (!updatedData) {
+    return null;
+  }
+  return convertLoanTrackerToDTO(updatedData);
 } 

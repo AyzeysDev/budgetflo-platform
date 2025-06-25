@@ -6,6 +6,7 @@ import {
   getLoanTrackersByUserId,
   updateLoanTracker,
   deleteLoanTracker,
+  syncLoanTrackerWithAccount,
   createSavingsTracker,
   getSavingsTrackersByUserId,
   updateSavingsTracker,
@@ -64,7 +65,7 @@ router.post(
     body('interestRate').isFloat({ min: 0, max: 100 }),
     body('tenureMonths').isInt({ min: 1 }),
     body('startDate').isISO8601(),
-    body('linkedAccountId').optional(),
+    body('linkedAccountId').notEmpty().withMessage('Linked account is required'),
   ],
   handleValidationErrors,
   asyncHandler(async (req: Request, res: Response) => {
@@ -126,6 +127,28 @@ router.delete(
     }
 
     res.status(204).send();
+  })
+);
+
+// POST /api/users/:userId/trackers/loans/:trackerId/sync - Sync loan tracker with account balance
+router.post(
+  '/loans/:trackerId/sync',
+  [param('trackerId').notEmpty()],
+  handleValidationErrors,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: 'User ID missing from route parameters.' });
+      return;
+    }
+
+    const tracker = await syncLoanTrackerWithAccount(req.params.trackerId, userId);
+    if (!tracker) {
+      res.status(404).json({ error: 'Loan tracker not found' });
+      return;
+    }
+
+    res.json(tracker);
   })
 );
 

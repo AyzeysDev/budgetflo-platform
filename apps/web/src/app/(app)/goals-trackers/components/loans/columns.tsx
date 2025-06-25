@@ -22,8 +22,7 @@ export const getLoanColumns = (
   accountsMap: Map<string, WebAppAccount>,
   onEdit: (tracker: WebAppLoanTracker) => void,
   onDelete: (trackerId: string) => void,
-  onViewProgress: (tracker: WebAppLoanTracker) => void,
-  onRecordPayment: (tracker: WebAppLoanTracker) => void
+  onViewProgress: (tracker: WebAppLoanTracker) => void
 ): ColumnDef<WebAppLoanTracker>[] => [
   {
     accessorKey: "name",
@@ -90,7 +89,6 @@ export const getLoanColumns = (
             <DropdownMenuItem onClick={() => onViewProgress(tracker)}>
               View Progress
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRecordPayment(tracker)}>Record Payment</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive"

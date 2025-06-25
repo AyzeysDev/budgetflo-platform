@@ -30,7 +30,7 @@ const loanTrackerSchema = z.object({
   tenureMonths: z.number().min(1, 'Tenure must be at least 1 month'),
   startDate: z.date({ required_error: 'Start date is required' }),
   emiAmount: z.number().min(0.01, 'EMI amount must be greater than 0'),
-  linkedAccountId: z.string().optional(),
+  linkedAccountId: z.string().min(1, 'Please select a linked account'),
 });
 
 type LoanTrackerFormData = z.infer<typeof loanTrackerSchema>;
@@ -107,7 +107,7 @@ export default function LoanTrackerForm({
         tenureMonths: editingTracker.tenureMonths,
         startDate: new Date(editingTracker.startDate),
         emiAmount: editingTracker.emiAmount,
-        linkedAccountId: editingTracker.linkedAccountId || 'none',
+        linkedAccountId: editingTracker.linkedAccountId || '',
       });
     } else {
       reset({
@@ -117,7 +117,7 @@ export default function LoanTrackerForm({
         tenureMonths: 12,
         startDate: new Date(),
         emiAmount: 0,
-        linkedAccountId: 'none',
+        linkedAccountId: '',
       });
     }
   }, [editingTracker, reset]);
@@ -145,13 +145,15 @@ export default function LoanTrackerForm({
 
   const onSubmit = async (data: LoanTrackerFormData) => {
     setIsSubmitting(true);
+    const toastId = toast.loading(editingTracker ? "Updating loan tracker..." : "Creating loan tracker...");
+    
     try {
       const url = editingTracker ? `/api/trackers/loans` : '/api/trackers/loans';
       const method = editingTracker ? 'PUT' : 'POST';
       
       const payload: WebAppCreateLoanTrackerPayload | WebAppUpdateLoanTrackerPayload = {
         ...data,
-        linkedAccountId: data.linkedAccountId === 'none' ? null : data.linkedAccountId,
+        linkedAccountId: data.linkedAccountId,
         ...(editingTracker && { trackerId: editingTracker.trackerId }),
         startDate: format(data.startDate, 'yyyy-MM-dd'),
       };
@@ -163,16 +165,17 @@ export default function LoanTrackerForm({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save loan tracker');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save loan tracker');
       }
 
       const savedTracker = await response.json();
       onSave(savedTracker);
-      toast.success(editingTracker ? 'Loan tracker updated successfully' : 'Loan tracker created successfully');
+      toast.success(editingTracker ? 'Loan tracker updated successfully' : 'Loan tracker created successfully', { id: toastId });
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving loan tracker:', error);
-      toast.error('Failed to save loan tracker');
+      toast.error((error as Error).message, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
@@ -295,21 +298,20 @@ export default function LoanTrackerForm({
               disabled={isSubmitting}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select a loan account" />
+                <SelectValue placeholder="Select a loan account (required)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
                 {liabilityAccounts.length > 0 ? (
                   liabilityAccounts.map((account) => (
                     <SelectItem key={account.accountId} value={account.accountId}>
-                      {account.name} ({account.type.replace('_', ' ')})
+                      {account.name} - {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(account.balance)} ({account.type.replace('_', ' ')})
                     </SelectItem>
                   ))
                 ) : (
                   // Fallback: show all accounts if filtering fails
                   accounts?.map((account) => (
                     <SelectItem key={account.accountId} value={account.accountId}>
-                      {account.name} ({account.type.replace('_', ' ')}) [ALL]
+                      {account.name} - {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(account.balance)} ({account.type.replace('_', ' ')}) [ALL]
                     </SelectItem>
                   ))
                 )}
@@ -325,15 +327,42 @@ export default function LoanTrackerForm({
                 ⚠️ No accounts available. Create accounts first to link with loan trackers.
               </p>
             )}
-            {watch('linkedAccountId') && watch('linkedAccountId') !== 'none' && (
-              <div className="text-sm text-muted-foreground mt-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-md">
-                <p className="font-medium text-green-700 dark:text-green-300 mb-1">🏦 Loan Tracking Features:</p>
-                <ul className="space-y-1 text-green-600 dark:text-green-400">
-                  <li>• Monitor EMI payments automatically</li>
-                  <li>• Track remaining balance updates</li>
-                  <li>• Calculate payoff date projections</li>
-                  <li>• View total paid vs. remaining amounts</li>
-                </ul>
+            {watch('linkedAccountId') && (
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/50 border-border">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <Label className="text-sm font-medium text-foreground">
+                      Auto-Sync Enabled
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Loan progress will automatically sync with account balance
+                  </p>
+                </div>
+                {(() => {
+                  const selectedAccount = liabilityAccounts.length > 0 
+                    ? liabilityAccounts.find(acc => acc.accountId === watch('linkedAccountId'))
+                    : accounts?.find(acc => acc.accountId === watch('linkedAccountId'));
+                  return selectedAccount && (
+                    <div className="text-xs bg-background p-3 rounded-lg border border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground font-medium">
+                          Current Balance:
+                        </span>
+                        <span className="text-foreground font-bold">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(selectedAccount.balance)}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground mt-1">
+                        💡 Progress = (Total Loan - Current Balance) ÷ Total Loan
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        As you make payments, the account balance decreases and progress increases
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
             {errors.linkedAccountId && (

@@ -118,7 +118,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = `${API_BASE_URL}/api/trackers/savings/${trackerId}`;
+    const url = `${API_BASE_URL}/api/users/${session.user.id}/trackers/savings/${trackerId}`;
 
     const response = await fetch(url, {
       method: 'DELETE',

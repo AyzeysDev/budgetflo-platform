@@ -43,7 +43,7 @@ export interface WebAppSavingsTracker {
 
 export interface WebAppCreateLoanTrackerPayload {
   name: string;
-  linkedAccountId?: string | null;
+  linkedAccountId: string;
   totalAmount: number;
   emiAmount: number;
   interestRate: number;
