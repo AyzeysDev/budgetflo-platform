@@ -472,26 +472,26 @@ export default function ReportsClientPage({
                 </ChartContainer>
               </div>
               <div className="lg:col-span-1 space-y-4">
-                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/40 border border-emerald-200/60 shadow-sm backdrop-blur-sm">
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-sm"></div>
-                    <span className="text-sm font-medium text-emerald-700">Total Assets</span>
+                    <div className="h-3 w-3 rounded-full bg-green-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-muted-foreground">Total Assets</span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalAssets)}</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(totalAssets)}</p>
                 </div>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-red-50/80 to-red-100/40 border border-red-200/60 shadow-sm backdrop-blur-sm">
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="h-3 w-3 rounded-full bg-red-500 shadow-sm"></div>
-                    <span className="text-sm font-medium text-red-700">Total Liabilities</span>
+                    <span className="text-sm font-medium text-muted-foreground">Total Liabilities</span>
                   </div>
-                  <p className="text-2xl font-bold text-red-900">{formatCurrency(totalDebts)}</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(totalDebts)}</p>
                 </div>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-indigo-50/80 to-indigo-100/40 border border-indigo-200/60 shadow-sm backdrop-blur-sm">
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="h-3 w-3 rounded-full bg-indigo-500 shadow-sm"></div>
-                    <span className="text-sm font-medium text-indigo-700">Net Worth</span>
+                    <div className="h-3 w-3 rounded-full bg-primary shadow-sm"></div>
+                    <span className="text-sm font-medium text-muted-foreground">Net Worth</span>
                   </div>
-                  <p className="text-2xl font-bold text-indigo-900">{formatCurrency(netWorth)}</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(netWorth)}</p>
                 </div>
               </div>
             </CardContent>
@@ -539,26 +539,26 @@ export default function ReportsClientPage({
                 </ChartContainer>
               </div>
               <div className="lg:col-span-1 space-y-4">
-                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/40 border border-emerald-200/60 shadow-sm backdrop-blur-sm">
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-sm"></div>
-                    <span className="text-sm font-medium text-emerald-700">Total Income</span>
+                    <div className="h-3 w-3 rounded-full bg-green-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-muted-foreground">Total Income</span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(overviewMetrics.totalIncome)}</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(overviewMetrics.totalIncome)}</p>
                 </div>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-red-50/80 to-red-100/40 border border-red-200/60 shadow-sm backdrop-blur-sm">
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="h-3 w-3 rounded-full bg-red-500 shadow-sm"></div>
-                    <span className="text-sm font-medium text-red-700">Total Expense</span>
+                    <span className="text-sm font-medium text-muted-foreground">Total Expense</span>
                   </div>
-                  <p className="text-2xl font-bold text-red-900">{formatCurrency(overviewMetrics.totalExpense)}</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(overviewMetrics.totalExpense)}</p>
                 </div>
-                <div className={`p-5 rounded-xl shadow-sm backdrop-blur-sm ${overviewMetrics.totalSurplus >= 0 ? 'bg-gradient-to-br from-blue-50/80 to-blue-100/40 border border-blue-200/60' : 'bg-gradient-to-br from-orange-50/80 to-orange-100/40 border border-orange-200/60'}`}>
+                <div className="p-5 rounded-xl bg-card/60 border border-border/50 shadow-sm backdrop-blur-sm">
                   <div className="flex items-center gap-3 mb-2">
                     <div className={`h-3 w-3 rounded-full shadow-sm ${overviewMetrics.totalSurplus >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
-                    <span className={`text-sm font-medium ${overviewMetrics.totalSurplus >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Net Flow</span>
+                    <span className="text-sm font-medium text-muted-foreground">Net Flow</span>
                   </div>
-                  <p className={`text-2xl font-bold ${overviewMetrics.totalSurplus >= 0 ? 'text-blue-900' : 'text-orange-900'}`}>{formatCurrency(overviewMetrics.totalSurplus)}</p>
+                  <p className={`text-2xl font-bold ${overviewMetrics.totalSurplus >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>{formatCurrency(overviewMetrics.totalSurplus)}</p>
                 </div>
               </div>
             </CardContent>
@@ -630,7 +630,7 @@ export default function ReportsClientPage({
                   const variance = month.totalSpent - month.totalBudgeted;
                   const percentage = month.totalBudgeted > 0 ? (month.totalSpent / month.totalBudgeted) * 100 : 0;
                   return (
-                    <div key={month.monthName} className="p-5 rounded-xl bg-card/50 border border-border/50 backdrop-blur-sm shadow-sm">
+                    <div key={month.monthName} className="p-5 rounded-xl bg-card/60 border border-border/50 backdrop-blur-sm shadow-sm">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="font-semibold text-lg">{month.fullDate}</h3>
                         <Badge 
@@ -706,14 +706,14 @@ export default function ReportsClientPage({
                   const totalFlow = account.inflow + account.outflow;
                   const isPositiveFlow = account.netFlow >= 0;
                   return (
-                    <div key={account.accountId} className={cn("p-6 rounded-xl border backdrop-blur-sm shadow-sm", isPositiveFlow ? "bg-gradient-to-br from-green-50/80 to-green-100/40 border-green-200/60" : "bg-gradient-to-br from-red-50/80 to-red-100/40 border-red-200/60")}>
+                    <div key={account.accountId} className="p-6 rounded-xl bg-card/60 border border-border/50 backdrop-blur-sm shadow-sm">
                       <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center gap-3">
-                          <div className={cn("p-3 rounded-full shadow-sm", isPositiveFlow ? "bg-green-100" : "bg-red-100")}>
-                            <Wallet className={cn("h-6 w-6", isPositiveFlow ? "text-green-600" : "text-red-600")} />
+                          <div className="p-3 rounded-full bg-muted/20 shadow-sm">
+                            <Wallet className="h-6 w-6 text-muted-foreground" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg">{account.name}</h3>
+                            <h3 className="font-bold text-lg text-foreground">{account.name}</h3>
                             <p className="text-sm text-muted-foreground">
                               {totalFlow > 0 ? `${((account.inflow / totalFlow) * 100).toFixed(0)}% inflow` : 'No activity'}
                             </p>
@@ -730,9 +730,9 @@ export default function ReportsClientPage({
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <ArrowUpRight className="h-4 w-4 text-green-600" />
-                            <span className="text-sm font-medium">Income</span>
+                            <span className="text-sm font-medium text-muted-foreground">Income</span>
                           </div>
-                          <p className="text-2xl font-bold text-green-900">{formatCurrency(account.inflow)}</p>
+                          <p className="text-2xl font-bold text-foreground">{formatCurrency(account.inflow)}</p>
                           <Progress 
                             value={totalFlow > 0 ? (account.inflow / totalFlow) * 100 : 0} 
                             className="h-2" 
@@ -741,9 +741,9 @@ export default function ReportsClientPage({
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <ArrowDownRight className="h-4 w-4 text-red-600" />
-                            <span className="text-sm font-medium">Expense</span>
+                            <span className="text-sm font-medium text-muted-foreground">Expense</span>
                           </div>
-                          <p className="text-2xl font-bold text-red-900">{formatCurrency(account.outflow)}</p>
+                          <p className="text-2xl font-bold text-foreground">{formatCurrency(account.outflow)}</p>
                           <Progress 
                             value={totalFlow > 0 ? (account.outflow / totalFlow) * 100 : 0} 
                             className="h-2" 
