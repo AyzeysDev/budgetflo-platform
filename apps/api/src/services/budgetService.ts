@@ -826,7 +826,8 @@ export async function deleteRecurringBudget(budgetId: string, userId: string): P
 export async function getMonthlyBudget(
   userId: string,
   year: number,
-  month: number
+  month: number,
+  forceRefresh: boolean = false
 ): Promise<MonthlyBudget> {
   const monthlyBudgetsCollection = getMonthlyBudgetsCollection();
   const documentId = `${userId}_${year}-${month.toString().padStart(2, '0')}`;
@@ -836,13 +837,13 @@ export async function getMonthlyBudget(
     const monthlyBudgetRef = monthlyBudgetsCollection.doc(documentId);
     const monthlyBudgetDoc = await monthlyBudgetRef.get();
     
-    // Check if cached data exists and is recent (within last 5 minutes for immediate fix application)
-    if (monthlyBudgetDoc.exists) {
+    // Check if cached data exists and is recent (skip cache if forceRefresh is true)
+    if (!forceRefresh && monthlyBudgetDoc.exists) {
       const data = monthlyBudgetDoc.data() as MonthlyBudget;
       const lastUpdate = data.updatedAt.toDate();
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
       
-      if (lastUpdate > fiveMinutesAgo) {
+      if (lastUpdate > thirtySecondsAgo) {
         return data;
       }
     }
@@ -857,6 +858,7 @@ export async function getMonthlyBudget(
     // Calculate which budgets are active this month
     const categoryBreakdown: MonthlyBudget['categoryBreakdown'] = {};
     let totalBudgeted = 0;
+    let hasOverallBudget = false;
     
     // Add regular budgets for this month
     for (const budget of regularBudgets) {
@@ -867,10 +869,14 @@ export async function getMonthlyBudget(
           budgetId: budget.id,
           name: budget.name
         };
-        totalBudgeted += budget.amount;
+        // Only add to total if there's no overall budget
+        if (!hasOverallBudget) {
+          totalBudgeted += budget.amount;
+        }
       } else if (budget.isOverall) {
-        // Handle overall budget separately if needed
+        // Overall budget takes precedence - use it as the total
         totalBudgeted = budget.amount;
+        hasOverallBudget = true;
       }
     }
     
@@ -892,23 +898,32 @@ export async function getMonthlyBudget(
         // Follow the exact same pattern as overall budget recurring logic
         const nextOccurrence = rule.after(new Date(Date.UTC(year, month - 1, 0)), true);
         
-        if (nextOccurrence && nextOccurrence.getUTCFullYear() === year && nextOccurrence.getUTCMonth() === (month - 1) && budget.categoryId && !budget.isOverall) {
-          // Budget is active this month
-          const budgetAmount = budget.amount;
-          
-          // If category already has a regular budget, add to it
-          if (categoryBreakdown[budget.categoryId]) {
-            categoryBreakdown[budget.categoryId].budgeted += budgetAmount;
-          } else {
-            categoryBreakdown[budget.categoryId] = {
-              budgeted: budgetAmount,
-              spent: 0, // Will be calculated next
-              budgetId: budget.id,
-              name: budget.name
-            };
+        if (nextOccurrence && nextOccurrence.getUTCFullYear() === year && nextOccurrence.getUTCMonth() === (month - 1)) {
+          if (budget.isOverall) {
+            // Recurring overall budget takes precedence
+            totalBudgeted = budget.amount;
+            hasOverallBudget = true;
+          } else if (budget.categoryId) {
+            // Budget is active this month
+            const budgetAmount = budget.amount;
+            
+            // If category already has a regular budget, add to it
+            if (categoryBreakdown[budget.categoryId]) {
+              categoryBreakdown[budget.categoryId].budgeted += budgetAmount;
+            } else {
+              categoryBreakdown[budget.categoryId] = {
+                budgeted: budgetAmount,
+                spent: 0, // Will be calculated next
+                budgetId: budget.id,
+                name: budget.name
+              };
+            }
+            
+            // Only add to total if there's no overall budget
+            if (!hasOverallBudget) {
+              totalBudgeted += budgetAmount;
+            }
           }
-          
-          totalBudgeted += budgetAmount;
         }
       } catch (error) {
         console.error(`Error processing RRULE for budget ${budget.id}:`, error);

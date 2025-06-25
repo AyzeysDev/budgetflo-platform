@@ -321,7 +321,7 @@ export default function ReportsClientPage({
         const year = current.getFullYear();
         const month = current.getMonth() + 1;
         try {
-          const response = await fetch(`/api/budgets/monthly-overview?year=${year}&month=${month}&_t=${cacheBuster}`, {
+          const response = await fetch(`/api/budgets/monthly-overview?year=${year}&month=${month}&forceRefresh=true&_t=${cacheBuster}`, {
             cache: 'no-store'
           });
           if (response.ok) {

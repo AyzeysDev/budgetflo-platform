@@ -92,7 +92,8 @@ const overallBudgetPayloadValidation = [
 
 const monthlyOverviewValidationRules = [
   query('year').toInt().isInt({ min: 2000, max: 2100 }).withMessage('Valid year is required.'),
-  query('month').toInt().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.')
+  query('month').toInt().isInt({ min: 1, max: 12 }).withMessage('Valid month (1-12) is required.'),
+  query('forceRefresh').optional().isBoolean().toBoolean().withMessage('forceRefresh must be a boolean.')
 ];
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
@@ -123,8 +124,9 @@ router.get(
     
     const year = parseInt(req.query.year as string);
     const month = parseInt(req.query.month as string);
+    const forceRefresh = req.query.forceRefresh === 'true';
     
-    const monthlyBudget = await budgetService.getMonthlyBudget(userId, year, month);
+    const monthlyBudget = await budgetService.getMonthlyBudget(userId, year, month, forceRefresh);
     res.status(200).json({ data: monthlyBudget });
   })
 );
