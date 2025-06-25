@@ -54,6 +54,13 @@ import {
   Area,
   AreaChart,
 } from 'recharts';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 interface ReportsClientPageProps {
   initialAccounts: WebAppAccount[];
@@ -221,8 +228,6 @@ export default function ReportsClientPage({
     return filtered;
   }, [transactions, selectedTimeRange, selectedCategory, selectedAccount, getTimeRangeDate]);
 
-
-
   // Calculate income vs expense data with accurate time buckets
   const incomeVsExpenseData = useMemo(() => {
     const startDate = getTimeRangeDate(selectedTimeRange);
@@ -266,8 +271,6 @@ export default function ReportsClientPage({
       })
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [filteredTransactions, selectedTimeRange, getTimeRangeDate]);
-
-
 
   // Account flow analysis
   const accountFlow = useMemo(() => {
@@ -379,298 +382,193 @@ export default function ReportsClientPage({
   } satisfies ChartConfig;
 
   return (
-    <div className="flex flex-col gap-8 md:gap-10">
-      {/* Ultra Modern Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-8 md:p-10">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-        <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20">
-                <BarChart3 className="h-8 w-8 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent tracking-tight">
-                  Financial Analytics
-                </h1>
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="h-1 w-12 bg-gradient-to-r from-primary to-primary/50 rounded-full"></div>
-                  <span className="text-sm font-medium text-primary">Power User Dashboard</span>
-                </div>
-              </div>
-            </div>
-            <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed">
-              Comprehensive insights into your financial performance, spending patterns, and wealth growth trends with advanced analytics.
+    <div className="flex flex-col gap-4">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b pb-4">
+        <div className="flex items-center gap-3">
+          <BarChart3 className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Financial Analytics</h1>
+            <p className="text-muted-foreground text-sm">
+              Insights into your financial performance and trends.
             </p>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Real-time data</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span>Advanced filtering</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 bg-purple-500 rounded-full animate-pulse"></div>
-                <span>Interactive charts</span>
-              </div>
-            </div>
           </div>
-          <div className="flex items-center gap-3">
+        </div>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+            <Select value={selectedTimeRange} onValueChange={(value: any) => setSelectedTimeRange(value)}>
+              <SelectTrigger className="w-full sm:w-[150px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3m">Last 3 months</SelectItem>
+                <SelectItem value="6m">Last 6 months</SelectItem>
+                <SelectItem value="12m">Last 12 months</SelectItem>
+                <SelectItem value="all">All time</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-full sm:w-[150px] h-9">
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+              <SelectTrigger className="w-full sm:w-[150px] h-9">
+                <SelectValue placeholder="All accounts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map(account => (
+                  <SelectItem key={account.accountId} value={account.accountId}>
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Button 
               onClick={refreshData} 
               variant="outline" 
+              size="icon"
               disabled={isLoading}
-              className="bg-background/50 backdrop-blur-sm border-primary/20 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+              className="h-9 w-9"
             >
-              <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
-              Refresh Data
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
             </Button>
             <Button 
-              variant="default"
-              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-200"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
             >
-              <Download className="mr-2 h-4 w-4" />
-              Export Report
+              <Download className="h-4 w-4" />
             </Button>
-          </div>
         </div>
       </div>
 
-      {/* Ultra Modern Filters */}
-      <Card className="border-2 border-primary/10 bg-gradient-to-br from-background/95 to-primary/5 backdrop-blur-sm shadow-xl">
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-3 text-xl">
-            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
-              <Filter className="h-5 w-5 text-primary" />
-            </div>
-            Advanced Filters
-            <Badge variant="secondary" className="ml-auto">Dynamic</Badge>
-          </CardTitle>
-          <CardDescription className="text-base">
-            Fine-tune your analysis with powerful filtering options
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
-                Time Range
-              </label>
-              <Select value={selectedTimeRange} onValueChange={(value: any) => setSelectedTimeRange(value)}>
-                <SelectTrigger className="w-full h-11 bg-background/50 border-primary/20 hover:border-primary/30 transition-all duration-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  <SelectItem value="3m" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                      Last 3 months
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="6m" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
-                      Last 6 months
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="12m" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-purple-500 rounded-full"></div>
-                      Last 12 months
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="all" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-orange-500 rounded-full"></div>
-                      All time
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {filteredTransactions.length} transactions in range
-              </p>
-            </div>
-            
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                Category Filter
-              </label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full h-11 bg-background/50 border-primary/20 hover:border-primary/30 transition-all duration-200">
-                  <SelectValue placeholder="Filter by category..." />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  <SelectItem value="all" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
-                      All categories
-                    </div>
-                  </SelectItem>
-                  {categories.map(category => (
-                    <SelectItem key={category.id} value={category.id} className="hover:bg-primary/10">
-                      <div className="flex items-center gap-2">
-                        <IconRenderer name={category.icon as AvailableIconName} size={14} />
-                        {category.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {categories.length} categories available
-              </p>
-            </div>
-            
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <div className="h-2 w-2 bg-purple-500 rounded-full"></div>
-                Account Filter
-              </label>
-              <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                <SelectTrigger className="w-full h-11 bg-background/50 border-primary/20 hover:border-primary/30 transition-all duration-200">
-                  <SelectValue placeholder="Filter by account..." />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  <SelectItem value="all" className="hover:bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
-                      All accounts
-                    </div>
-                  </SelectItem>
-                  {accounts.map(account => (
-                    <SelectItem key={account.accountId} value={account.accountId} className="hover:bg-primary/10">
-                      <div className="flex items-center gap-2">
-                        <Wallet className="h-4 w-4 text-muted-foreground" />
-                        {account.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {accounts.length} accounts tracked
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Ultra Modern Report Tabs */}
       <Tabs value={selectedReportType} defaultValue="overview" onValueChange={(value: any) => setSelectedReportType(value)}>
-        <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-2 rounded-2xl border border-primary/10">
-          <TabsTrigger 
-            value="overview" 
-            className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-          >
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Overview
-            </div>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="budget" 
-            className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-          >
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              Budget Performance
-            </div>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="flow" 
-            className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-          >
-            <div className="flex items-center gap-2">
-              <ArrowRightLeft className="h-4 w-4" />
-              Account Flow
-            </div>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex justify-center">
+          <TabsList className="inline-grid w-auto grid-cols-3 bg-muted/50 p-2 rounded-2xl border border-primary/10">
+            <TabsTrigger 
+              value="overview" 
+              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Overview
+              </div>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="budget" 
+              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Budget Performance
+              </div>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="flow" 
+              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="h-4 w-4" />
+                Account Flow
+              </div>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          {/* Net Worth Over Time */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                Net Worth Over Time
-              </CardTitle>
-              <CardDescription>Track your wealth growth month over month</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <ChartContainer config={chartConfig} className="h-[300px]">
-                    <LineChart data={netWorthHistory}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis tickFormatter={formatNumber} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={3} />
-                      <Line type="monotone" dataKey="assets" stroke="var(--color-assets)" strokeWidth={2} strokeDasharray="5 5" />
-                      <Line type="monotone" dataKey="liabilities" stroke="var(--color-liabilities)" strokeWidth={2} strokeDasharray="5 5" />
-                    </LineChart>
-                  </ChartContainer>
-                </div>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950">
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                      <ArrowUpRight className="h-4 w-4" />
-                      <span className="text-sm font-medium">Total Assets</span>
+        <TabsContent value="overview" className="mt-4">
+          <Carousel className="w-full max-w-4xl mx-auto">
+            <CarouselContent>
+              <CarouselItem>
+                {/* Net Worth Over Time */}
+                <Card className="min-h-[560px] border-2 border-primary/10 bg-gradient-to-br from-background/95 to-primary/5 backdrop-blur-sm shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                      Net Worth Over Time
+                    </CardTitle>
+                    <CardDescription>Track your wealth growth month over month</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 pt-4">
+                    <ChartContainer config={chartConfig} className="h-[350px]">
+                      <LineChart data={netWorthHistory}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis tickFormatter={formatNumber} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={3} />
+                        <Line type="monotone" dataKey="assets" stroke="var(--color-assets)" strokeWidth={2} strokeDasharray="5 5" />
+                        <Line type="monotone" dataKey="liabilities" stroke="var(--color-liabilities)" strokeWidth={2} strokeDasharray="5 5" />
+                      </LineChart>
+                    </ChartContainer>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-primary/10">
+                      <div className="rounded-lg border bg-card/50 p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                          Total Assets
+                        </div>
+                        <p className="text-2xl font-bold mt-1">{formatCurrency(totalAssets)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-card/50 p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />
+                          Total Liabilities
+                        </div>
+                        <p className="text-2xl font-bold mt-1">{formatCurrency(totalDebts)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-card/50 p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-primary" />
+                          Net Worth
+                        </div>
+                        <p className="text-2xl font-bold mt-1">{formatCurrency(netWorth)}</p>
+                      </div>
                     </div>
-                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{formatCurrency(totalAssets)}</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950">
-                    <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
-                      <ArrowDownRight className="h-4 w-4" />
-                      <span className="text-sm font-medium">Total Liabilities</span>
-                    </div>
-                    <p className="text-2xl font-bold text-red-900 dark:text-red-100">{formatCurrency(totalDebts)}</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-primary/10">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Target className="h-4 w-4" />
-                      <span className="text-sm font-medium">Net Worth</span>
-                    </div>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(netWorth)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {netWorth >= 0 ? '+' : ''}{((netWorth / (totalAssets + totalDebts || 1)) * 100).toFixed(1)}% health score
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Income vs Expense */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ArrowRightLeft className="h-5 w-5 text-blue-600" />
-                Income vs Expense
-              </CardTitle>
-              <CardDescription>Monthly cash flow analysis with surplus/deficit tracking</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[400px]">
-                <ComposedChart data={incomeVsExpenseData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis tickFormatter={formatNumber} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="income" fill="var(--color-income)" />
-                  <Bar dataKey="expense" fill="var(--color-expense)" />
-                  <Line type="monotone" dataKey="surplus" stroke="var(--color-surplus)" strokeWidth={3} />
-                </ComposedChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              </CarouselItem>
+              <CarouselItem>
+                {/* Income vs Expense */}
+                <Card className="min-h-[560px] border-2 border-primary/10 bg-gradient-to-br from-background/95 to-primary/5 backdrop-blur-sm shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ArrowRightLeft className="h-5 w-5 text-blue-600" />
+                      Income vs Expense
+                    </CardTitle>
+                    <CardDescription>Monthly cash flow analysis with surplus/deficit tracking</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <ChartContainer config={chartConfig} className="h-[430px]">
+                      <ComposedChart data={incomeVsExpenseData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis tickFormatter={formatNumber} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="income" fill="var(--color-income)" />
+                        <Bar dataKey="expense" fill="var(--color-expense)" />
+                        <Line type="monotone" dataKey="surplus" stroke="var(--color-surplus)" strokeWidth={3} />
+                      </ComposedChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </CarouselItem>
+            </CarouselContent>
+            <CarouselPrevious className="absolute -left-12 top-1/2 -translate-y-1/2" />
+            <CarouselNext className="absolute -right-12 top-1/2 -translate-y-1/2" />
+          </Carousel>
         </TabsContent>
 
         {/* Budget Performance Tab */}
