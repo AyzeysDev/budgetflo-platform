@@ -17,15 +17,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Loader2, Landmark } from "lucide-react"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
+  isLoading?: boolean
 }
 
 export default function LoansDataTable<TData, TValue>({
   columns,
   data,
+  isLoading = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
 
@@ -63,7 +66,16 @@ export default function LoansDataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-32">
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Loading loan trackers...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
@@ -78,8 +90,18 @@ export default function LoansDataTable<TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  No results.
+                <TableCell colSpan={columns.length} className="h-32">
+                  <div className="flex flex-col items-center justify-center space-y-4 text-center">
+                    <div className="rounded-full bg-muted p-4">
+                      <Landmark className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">No loan trackers yet</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Create your first loan tracker to monitor repayment progress.
+                      </p>
+                    </div>
+                  </div>
                 </TableCell>
               </TableRow>
             )}

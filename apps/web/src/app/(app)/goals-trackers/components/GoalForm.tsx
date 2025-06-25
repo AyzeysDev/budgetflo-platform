@@ -231,31 +231,31 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ac
 
            {/* Auto-sync Status - Show when account is selected */}
            {linkedAccountId && linkedAccountId !== 'none' && (
-             <div className="space-y-3 p-4 border rounded-lg bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/60 dark:border-emerald-800/40 backdrop-blur-sm">
+             <div className="space-y-3 p-4 border rounded-lg bg-muted/50 border-border">
                <div className="space-y-2">
                  <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                   <Label className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                   <Label className="text-sm font-medium text-foreground">
                      Auto-Sync Enabled
                    </Label>
                  </div>
-                 <p className="text-xs text-emerald-700/90 dark:text-emerald-300/90">
+                 <p className="text-xs text-muted-foreground">
                    Goal progress will automatically match your account balance
                  </p>
                </div>
                {(() => {
                  const selectedAccount = assetAccounts.find(acc => acc.accountId === linkedAccountId);
                  return selectedAccount && (
-                   <div className="text-xs bg-white/60 dark:bg-emerald-900/50 p-3 rounded-lg border border-emerald-300/40 dark:border-emerald-700/40">
+                   <div className="text-xs bg-background p-3 rounded-lg border border-border">
                      <div className="flex items-center justify-between">
-                       <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+                       <span className="text-foreground font-medium">
                          Account Balance:
                        </span>
-                       <span className="text-emerald-800 dark:text-emerald-200 font-bold">
+                       <span className="text-foreground font-bold">
                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(selectedAccount.balance)}
                        </span>
                      </div>
-                     <p className="text-emerald-600 dark:text-emerald-400 mt-1">
+                     <p className="text-muted-foreground mt-1">
                        ✓ Goal will start with this amount as progress
                      </p>
                    </div>
@@ -266,14 +266,14 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ac
 
            {/* Warning when switching from synced to manual */}
            {showWarning && (
-             <div className="space-y-3 p-4 border rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40">
+             <div className="space-y-3 p-4 border rounded-lg bg-destructive/10 border-destructive/20">
                <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                 <Label className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                 <div className="w-2 h-2 bg-destructive rounded-full"></div>
+                 <Label className="text-sm font-medium text-destructive">
                    Warning: Switching to Manual Tracking
                  </Label>
                </div>
-               <p className="text-xs text-amber-700/90 dark:text-amber-300/90">
+               <p className="text-xs text-destructive/80">
                  Changing to manual tracking will reset your goal progress to $0. All previous contributions will be removed.
                </p>
              </div>

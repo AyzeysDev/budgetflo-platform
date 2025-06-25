@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR, { KeyedMutator } from 'swr';
-import { Plus, Goal as GoalIcon, HandCoins, Landmark, PiggyBank } from 'lucide-react';
+import { Plus, Goal as GoalIcon, HandCoins, Landmark, PiggyBank, AlertTriangle } from 'lucide-react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -32,14 +32,19 @@ import ProgressModal from './components/ProgressModal';
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function GoalsTrackersClientPage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const userId = session?.user?.id;
 
-  const { data: goals = [], mutate: mutateGoals } = useSWR<WebAppGoal[]>(userId ? `/api/goals` : null, fetcher);
-  const { data: loanTrackers = [], mutate: mutateLoanTrackers } = useSWR<WebAppLoanTracker[]>(userId ? `/api/trackers/loans` : null, fetcher);
-  const { data: savingsTrackers = [], mutate: mutateSavingsTrackers } = useSWR<WebAppSavingsTracker[]>(userId ? `/api/trackers/savings` : null, fetcher);
+  const { data: goals = [], mutate: mutateGoals, isLoading: goalsLoading } = useSWR<WebAppGoal[]>(userId ? `/api/goals` : null, fetcher);
+  const { data: loanTrackers = [], mutate: mutateLoanTrackers, isLoading: loanTrackersLoading } = useSWR<WebAppLoanTracker[]>(userId ? `/api/trackers/loans` : null, fetcher);
+  const { data: savingsTrackers = [], mutate: mutateSavingsTrackers, isLoading: savingsTrackersLoading } = useSWR<WebAppSavingsTracker[]>(userId ? `/api/trackers/savings` : null, fetcher);
   const { data: categories = {} } = useSWR<Record<string, WebAppCategory[]>>(userId ? '/api/categories' : null, fetcher);
   const { data: accounts = {} } = useSWR<Record<string, WebAppAccount[]>>(userId ? '/api/accounts' : null, fetcher);
+
+  // Consider loading if session is loading OR if we have userId but data is loading
+  const isGoalsLoading = sessionStatus === 'loading' || (!!userId && goalsLoading);
+  const isLoanTrackersLoading = sessionStatus === 'loading' || (!!userId && loanTrackersLoading);
+  const isSavingsTrackersLoading = sessionStatus === 'loading' || (!!userId && savingsTrackersLoading);
 
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
   const [isLoanFormOpen, setIsLoanFormOpen] = useState(false);
@@ -171,9 +176,54 @@ export default function GoalsTrackersClientPage() {
           <TabsTrigger value="loans"><Landmark className="h-4 w-4 mr-2"/>Loan Trackers</TabsTrigger>
           <TabsTrigger value="savings"><PiggyBank className="h-4 w-4 mr-2"/>Savings Trackers</TabsTrigger>
         </TabsList>
-        <TabsContent value="goals"><Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Financial Goals</CardTitle><CardDescription>Track your progress towards financial milestones.</CardDescription></div><Button onClick={() => { setEditingGoal(null); setIsGoalFormOpen(true); }}><Plus className="h-4 w-4 mr-2" /> New Goal</Button></CardHeader><CardContent><GoalsDataTable columns={goalTableColumns} data={goals} /></CardContent></Card></TabsContent>
-        <TabsContent value="loans"><Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Loan Repayment Trackers</CardTitle><CardDescription>Monitor your loan repayment progress.</CardDescription></div><Button onClick={() => { setEditingLoanTracker(null); setIsLoanFormOpen(true); }}><Plus className="h-4 w-4 mr-2" /> New Loan Tracker</Button></CardHeader><CardContent><LoansDataTable columns={loanTableColumns} data={loanTrackers} /></CardContent></Card></TabsContent>
-        <TabsContent value="savings"><Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Savings Trackers</CardTitle><CardDescription>Keep an eye on your savings growth.</CardDescription></div><Button onClick={() => { setEditingSavingsTracker(null); setIsSavingsFormOpen(true); }}><Plus className="h-4 w-4 mr-2" /> New Savings Tracker</Button></CardHeader><CardContent><SavingsDataTable columns={savingsTableColumns} data={savingsTrackers} /></CardContent></Card></TabsContent>
+        <TabsContent value="goals">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Financial Goals</CardTitle>
+                <CardDescription>Track your progress towards financial milestones.</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingGoal(null); setIsGoalFormOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" /> New Goal
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <GoalsDataTable columns={goalTableColumns} data={goals} isLoading={isGoalsLoading} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="loans">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Loan Repayment Trackers</CardTitle>
+                <CardDescription>Monitor your loan repayment progress.</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingLoanTracker(null); setIsLoanFormOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" /> New Loan Tracker
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <LoansDataTable columns={loanTableColumns} data={loanTrackers} isLoading={isLoanTrackersLoading} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="savings">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Savings Trackers</CardTitle>
+                <CardDescription>Keep an eye on your savings growth.</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingSavingsTracker(null); setIsSavingsFormOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" /> New Savings Tracker
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <SavingsDataTable columns={savingsTableColumns} data={savingsTrackers} isLoading={isSavingsTrackersLoading} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
       <GoalForm isOpen={isGoalFormOpen} onOpenChange={(open) => { setIsGoalFormOpen(open); if (!open) setEditingGoal(null); }} onSave={handleGoalSaved} editingGoal={editingGoal} accounts={getAccountsArray()} />
       <LoanTrackerForm isOpen={isLoanFormOpen} onOpenChange={(open) => { setIsLoanFormOpen(open); if (!open) setEditingLoanTracker(null); }} onSave={handleLoanTrackerSaved} editingTracker={editingLoanTracker} accounts={getAccountsArray()} />
@@ -198,9 +248,51 @@ export default function GoalsTrackersClientPage() {
         onPaymentSaved={handleLoanPaymentSaved} 
       />
       <ProgressModal open={isProgressModalOpen} onOpenChange={setIsProgressModalOpen} tracker={progressTracker} />
-      <AlertDialog open={!!goalToDelete} onOpenChange={(open) => !open && setGoalToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete your goal.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGoal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={!!loanTrackerToDelete} onOpenChange={(open) => !open && setLoanTrackerToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete your loan tracker.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteLoanTracker}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={!!savingsTrackerToDelete} onOpenChange={(open) => !open && setSavingsTrackerToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete your savings tracker.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteSavingsTracker}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <AlertDialog open={!!goalToDelete} onOpenChange={(open) => !open && setGoalToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-destructive"/>
+            </div>
+            <AlertDialogTitle>Delete Goal</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone. This will permanently delete your goal.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteGoal}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!loanTrackerToDelete} onOpenChange={(open) => !open && setLoanTrackerToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-destructive"/>
+            </div>
+            <AlertDialogTitle>Delete Loan Tracker</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone. This will permanently delete your loan tracker.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteLoanTracker}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!savingsTrackerToDelete} onOpenChange={(open) => !open && setSavingsTrackerToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-destructive"/>
+            </div>
+            <AlertDialogTitle>Delete Savings Tracker</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone. This will permanently delete your savings tracker.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSavingsTracker}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 

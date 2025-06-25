@@ -120,27 +120,27 @@ export default function GoalContributionDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* SYNCED GOAL - Light Mode Friendly */}
+          {/* SYNCED GOAL - Clean card style */}
           {isAlreadySynced && linkedAccount ? (
-            <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30">
+            <Card className="border-border">
               <CardContent className="pt-6">
                 <div className="text-center space-y-5">
                   {/* Simple sync icon */}
-                  <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center">
-                    <Link className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+                  <div className="mx-auto w-12 h-12 rounded-full border-2 border-border bg-muted/50 flex items-center justify-center">
+                    <Link className="h-5 w-5 text-muted-foreground" />
                   </div>
                   
                   <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-emerald-900 dark:text-emerald-100">Already Synced</h3>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300 leading-relaxed">
-                      This goal is automatically synced with your <span className="font-semibold text-emerald-800 dark:text-emerald-200">{linkedAccount.name}</span> account
+                    <h3 className="text-lg font-semibold">Already Synced</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      This goal is automatically synced with your <span className="font-medium">{linkedAccount.name}</span> account
                     </p>
                   </div>
 
                   {/* Simple balance display */}
-                  <div className="bg-white dark:bg-emerald-900/30 rounded-xl p-4 border border-emerald-200 dark:border-emerald-700">
-                    <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Current Balance</div>
-                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300">
+                  <div className="bg-muted/50 rounded-lg p-4 border border-border">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Current Balance</div>
+                    <div className="text-2xl font-semibold">
                       ${linkedAccount.balance.toLocaleString()}
                     </div>
                   </div>
@@ -148,7 +148,7 @@ export default function GoalContributionDialog({
                   <Button 
                     variant="outline" 
                     onClick={onClose}
-                    className="w-full border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/20"
+                    className="w-full"
                   >
                     Close
                   </Button>
@@ -156,48 +156,48 @@ export default function GoalContributionDialog({
               </CardContent>
             </Card>
           ) : (
-            /* NON-SYNCED GOAL - Light Mode Friendly Manual Contribution */
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+            /* NON-SYNCED GOAL - Clean manual contribution card */
+            <Card className="border-border">
               <CardContent className="pt-6">
                 <div className="space-y-5">
                   <div className="text-center">
                     {/* Simple plus icon */}
-                    <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4">
-                      <Plus className="h-7 w-7 text-blue-600 dark:text-blue-400" />
+                    <div className="mx-auto w-12 h-12 rounded-full border-2 border-border bg-muted/50 flex items-center justify-center mb-4">
+                      <Plus className="h-5 w-5 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">Add Contribution</h3>
-                    <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
+                    <h3 className="text-lg font-semibold">Add Contribution</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Manually add progress to your goal
                     </p>
                   </div>
 
                   <form onSubmit={handleSubmit(handleManualContribution)} className="space-y-5">
                     <div className="space-y-3">
-                      <Label htmlFor="amount" className="text-sm font-medium text-blue-900 dark:text-blue-100">Amount</Label>
+                      <Label htmlFor="amount" className="text-sm font-medium">Amount <span className="text-red-500">*</span></Label>
                       <div className="relative">
-                        <Banknote className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500 dark:text-blue-400" />
+                        <Banknote className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="amount"
                           type="number"
                           step="0.01"
                           placeholder="0.00"
-                          className="pl-10 bg-white dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 focus:border-blue-400 dark:focus:border-blue-500"
+                          className="pl-10"
                           {...register('amount', { valueAsNumber: true })}
                           disabled={isLoading}
                         />
                       </div>
                       {errors.amount && (
-                        <p className="text-sm text-red-500 dark:text-red-400">{errors.amount.message}</p>
+                        <p className="text-sm text-destructive">{errors.amount.message}</p>
                       )}
                     </div>
 
                     <div className="space-y-3">
-                      <Label htmlFor="notes" className="text-sm font-medium text-blue-900 dark:text-blue-100">Notes (Optional)</Label>
+                      <Label htmlFor="notes" className="text-sm font-medium">Notes (Optional)</Label>
                       <Textarea
                         id="notes"
                         placeholder="What's this contribution for?"
                         rows={3}
-                        className="resize-none bg-white dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 focus:border-blue-400 dark:focus:border-blue-500"
+                        className="resize-none"
                         {...register('notes')}
                         disabled={isLoading}
                       />
@@ -208,7 +208,7 @@ export default function GoalContributionDialog({
                         type="button" 
                         variant="outline" 
                         onClick={onClose} 
-                        className="flex-1 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/20"
+                        className="flex-1"
                         disabled={isLoading}
                       >
                         Cancel
@@ -216,7 +216,7 @@ export default function GoalContributionDialog({
                       <Button 
                         type="submit" 
                         disabled={isLoading} 
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white"
+                        className="flex-1"
                       >
                         {isLoading ? (
                           <>
