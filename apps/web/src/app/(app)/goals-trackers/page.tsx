@@ -39,24 +39,5 @@ async function fetchData<T>(url: string): Promise<T | null> {
 }
 
 export default async function GoalsTrackersPage() {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
-  // Fetch all data in parallel
-  const [goalsData, loanTrackersData, savingsTrackersData, accountsData, categoriesData] = await Promise.all([
-    fetchData<WebAppGoal[]>(`${baseUrl}/api/goals`),
-    fetchData<WebAppLoanTracker[]>(`${baseUrl}/api/trackers/loans`),
-    fetchData<WebAppSavingsTracker[]>(`${baseUrl}/api/trackers/savings`),
-    fetchData<WebAppAccount[]>(`${baseUrl}/api/accounts`),
-    fetchData<WebAppCategory[]>(`${baseUrl}/api/categories`),
-  ]);
-
-  return (
-    <GoalsTrackersClientPage
-      initialGoals={goalsData || []}
-      initialLoanTrackers={loanTrackersData || []}
-      initialSavingsTrackers={savingsTrackersData || []}
-      accounts={accountsData || []}
-      categories={categoriesData || []}
-    />
-  );
+  return <GoalsTrackersClientPage />;
 } 

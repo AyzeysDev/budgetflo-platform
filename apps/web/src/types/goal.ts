@@ -11,7 +11,8 @@ export interface WebAppGoal {
   description: string | null;
   categoryId: string | null;
   linkedAccountId: string | null;
-  status: 'in_progress' | 'completed' | 'overdue';
+  isSyncedWithAccount: boolean;
+  status: 'in_progress' | 'completed';
   isActive: boolean;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
@@ -41,15 +42,18 @@ export interface WebAppCreateGoalPayload {
   description?: string | null;
   categoryId?: string | null;
   linkedAccountId?: string | null;
+  isSyncedWithAccount?: boolean;
 }
 
 export interface WebAppUpdateGoalPayload {
   name?: string;
   targetAmount?: number;
+  currentAmount?: number;
   targetDate?: string;
   description?: string | null;
   categoryId?: string | null;
   linkedAccountId?: string | null;
+  isSyncedWithAccount?: boolean;
   isActive?: boolean;
 }
 

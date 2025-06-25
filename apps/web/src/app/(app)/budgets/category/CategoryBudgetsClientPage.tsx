@@ -14,7 +14,9 @@ import {
   Save,
 
   Settings2,
-  Repeat
+  Repeat,
+  TrendingUp,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,6 +69,89 @@ function generateMonthlyRRule(): string {
   return 'FREQ=MONTHLY;INTERVAL=1';
 }
 
+// Custom Ultra-Modern Progress Component for Category Budgets
+interface BudgetProgressProps {
+  spent: number;
+  budget: number;
+  className?: string;
+}
+
+function BudgetProgress({ spent, budget, className }: BudgetProgressProps) {
+  const percentage = budget > 0 ? (spent / budget) * 100 : 0;
+  const isOverBudget = spent > budget && budget > 0;
+  const overBudgetAmount = isOverBudget ? spent - budget : 0;
+  const overBudgetPercentage = isOverBudget ? (overBudgetAmount / budget) * 100 : 0;
+
+  if (budget === 0) return null;
+
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          {formatCurrency(spent)} spent
+        </span>
+        {isOverBudget && (
+          <div className="flex items-center gap-1 text-red-500 font-medium">
+            <TrendingUp className="h-3 w-3" />
+            <span>+{overBudgetPercentage.toFixed(0)}% over</span>
+          </div>
+        )}
+      </div>
+      
+      <div className="relative">
+        {/* Base progress bar */}
+        <div className="bg-muted h-1.5 rounded-full overflow-hidden">
+          <div 
+            className={cn(
+              "h-full transition-all duration-500 ease-out rounded-full",
+              isOverBudget 
+                ? "bg-gradient-to-r from-green-500 to-red-500" 
+                : "bg-gradient-to-r from-green-600 to-green-500"
+            )}
+            style={{ 
+              width: `${Math.min(percentage, 100)}%`,
+            }}
+          />
+        </div>
+        
+        {/* Over-budget indicator */}
+        {isOverBudget && (
+          <div className="absolute top-0 left-0 right-0 h-1.5">
+            <div 
+              className="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full animate-pulse"
+              style={{ 
+                width: `${Math.min(100 + overBudgetPercentage, 150)}%`,
+                opacity: 0.8,
+                filter: 'blur(0.5px)'
+              }}
+            />
+            {/* Glow effect */}
+            <div 
+              className="absolute top-0 h-1.5 bg-red-400 rounded-full"
+              style={{ 
+                width: `${Math.min(100 + overBudgetPercentage, 150)}%`,
+                opacity: 0.3,
+                filter: 'blur(1px)',
+                transform: 'translateY(-0.5px)'
+              }}
+            />
+          </div>
+        )}
+        
+        {/* Budget line indicator */}
+        <div className="absolute top-0 right-0 h-1.5 w-0.5 bg-foreground/30 rounded-full" />
+      </div>
+      
+      {isOverBudget && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium">
+          <AlertTriangle className="h-3 w-3" />
+          <span>Over budget by {formatCurrency(overBudgetAmount)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Sub-component for managing a single category's budget inline
 function CategoryBudgetRow({ category, budget, onSave, onSetRecurring, isSaving, currentPeriod }: CategoryBudgetRowProps) {
   const [amountInput, setAmountInput] = useState<string>(budget?.amount?.toString() || '');
@@ -113,7 +198,6 @@ function CategoryBudgetRow({ category, budget, onSave, onSetRecurring, isSaving,
 
   const spent = budget?.spentAmount || 0;
   const budgetedAmount = budget?.amount || 0;
-  const progress = budgetedAmount > 0 ? Math.min((spent / budgetedAmount) * 100, 100) : 0;
   const isBudgetSet = !!budget;
   const isDirty = amountInput !== (budget?.amount?.toString() || '');
   const isRecurring = budget?.isRecurring || false;
@@ -177,10 +261,11 @@ function CategoryBudgetRow({ category, budget, onSave, onSetRecurring, isSaving,
           )}
           
           {isBudgetSet && (
-            <>
-              <Progress value={progress} className="h-1.5 mt-2" />
-              <p className="text-xs text-muted-foreground mt-1">{formatCurrency(spent)} spent</p>
-            </>
+            <BudgetProgress 
+              spent={spent} 
+              budget={budgetedAmount} 
+              className="mt-2"
+            />
           )}
         </div>
       </div>

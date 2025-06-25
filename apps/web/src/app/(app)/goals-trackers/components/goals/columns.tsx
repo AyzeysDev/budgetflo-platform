@@ -45,8 +45,24 @@ export const getGoalColumns = (
     header: "Status",
     cell: ({ row }) => {
        const status = row.original.status;
-       const variant = status === 'completed' ? 'default' : status === 'overdue' ? 'destructive' : 'outline';
-       return <Badge variant={variant} className="capitalize">{status.replace('_', ' ')}</Badge>
+       // Simple, light-mode friendly styling
+       
+       if (status === 'completed') {
+         return (
+           <Badge className="bg-emerald-600 dark:bg-emerald-500 text-white border-0">
+             Completed
+           </Badge>
+         );
+       }
+       
+       return (
+         <Badge 
+           variant="outline" 
+           className="border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+         >
+           In Progress
+         </Badge>
+       );
     }
   },
   {

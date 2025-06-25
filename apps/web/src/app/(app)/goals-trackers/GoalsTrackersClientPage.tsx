@@ -81,10 +81,50 @@ export default function GoalsTrackersClientPage() {
     }, false);
   };
 
-  const handleGoalSaved = (goal: WebAppGoal) => {
+  const handleGoalSaved = async (goal: WebAppGoal) => {
     handleMutation(mutateGoals, goal, 'goalId');
     setIsGoalFormOpen(false);
+    
+    // Force a complete refresh to get the latest data from the server
+    await mutateGoals();
+    
+    // If the goal is synced with an account, do an additional sync call
+    if (goal.isSyncedWithAccount && goal.linkedAccountId) {
+      try {
+        await fetch(`/api/goals/${goal.goalId}/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        // Refresh again after sync
+        await mutateGoals();
+      } catch (error) {
+        console.warn(`Failed to sync goal ${goal.name} after creation:`, error);
+      }
+    }
   };
+
+  const syncGoalsWithAccounts = async () => {
+    const syncedGoals = goals.filter(goal => goal.isSyncedWithAccount && goal.linkedAccountId);
+    
+    for (const goal of syncedGoals) {
+      try {
+        await fetch(`/api/goals/${goal.goalId}/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.warn(`Failed to sync goal ${goal.name}:`, error);
+      }
+    }
+    
+    mutateGoals();
+  };
+
+  React.useEffect(() => {
+    if (goals.length > 0 && Object.keys(accounts).length > 0) {
+      syncGoalsWithAccounts();
+    }
+  }, [accounts]);
 
   const handleLoanTrackerSaved = (tracker: WebAppLoanTracker) => {
     handleMutation(mutateLoanTrackers, tracker, 'trackerId');
@@ -135,7 +175,7 @@ export default function GoalsTrackersClientPage() {
         <TabsContent value="loans"><Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Loan Repayment Trackers</CardTitle><CardDescription>Monitor your loan repayment progress.</CardDescription></div><Button onClick={() => { setEditingLoanTracker(null); setIsLoanFormOpen(true); }}><Plus className="h-4 w-4 mr-2" /> New Loan Tracker</Button></CardHeader><CardContent><LoansDataTable columns={loanTableColumns} data={loanTrackers} /></CardContent></Card></TabsContent>
         <TabsContent value="savings"><Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Savings Trackers</CardTitle><CardDescription>Keep an eye on your savings growth.</CardDescription></div><Button onClick={() => { setEditingSavingsTracker(null); setIsSavingsFormOpen(true); }}><Plus className="h-4 w-4 mr-2" /> New Savings Tracker</Button></CardHeader><CardContent><SavingsDataTable columns={savingsTableColumns} data={savingsTrackers} /></CardContent></Card></TabsContent>
       </Tabs>
-      <GoalForm isOpen={isGoalFormOpen} onOpenChange={(open) => { setIsGoalFormOpen(open); if (!open) setEditingGoal(null); }} onSave={handleGoalSaved} editingGoal={editingGoal} categories={getCategoriesArray()} accounts={getAccountsArray()} />
+      <GoalForm isOpen={isGoalFormOpen} onOpenChange={(open) => { setIsGoalFormOpen(open); if (!open) setEditingGoal(null); }} onSave={handleGoalSaved} editingGoal={editingGoal} accounts={getAccountsArray()} />
       <LoanTrackerForm isOpen={isLoanFormOpen} onOpenChange={(open) => { setIsLoanFormOpen(open); if (!open) setEditingLoanTracker(null); }} onSave={handleLoanTrackerSaved} editingTracker={editingLoanTracker} accounts={getAccountsArray()} />
       <SavingsTrackerForm isOpen={isSavingsFormOpen} onOpenChange={(open) => { setIsSavingsFormOpen(open); if (!open) setEditingSavingsTracker(null); }} onSave={handleSavingsTrackerSaved} editingTracker={editingSavingsTracker} accounts={getAccountsArray()} />
       <GoalContributionDialog 

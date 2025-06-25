@@ -6,6 +6,9 @@ import {
   getGoalById,
   updateGoal,
   deleteGoal,
+  getGoalContributions,
+  addGoalContribution,
+  syncGoalWithAccount,
 } from '../services/goalService';
 
 const router: Router = express.Router({ mergeParams: true });
@@ -151,6 +154,68 @@ router.delete(
     }
 
     res.status(204).send();
+  })
+);
+
+// GET /api/users/:userId/goals/:goalId/contributions - Get contributions for a goal
+router.get(
+  '/:goalId/contributions',
+  [param('goalId').notEmpty()],
+  handleValidationErrors,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: 'User ID missing from route parameters.' });
+      return;
+    }
+
+    const contributions = await getGoalContributions(req.params.goalId, userId);
+    res.json(contributions);
+  })
+);
+
+// POST /api/users/:userId/goals/:goalId/contributions - Add contribution to a goal
+router.post(
+  '/:goalId/contributions',
+  [
+    param('goalId').notEmpty(),
+    body('amount').isFloat({ min: 0.01 }),
+    body('notes').optional().trim(),
+    body('date').optional().isISO8601(),
+    body('transactionId').optional(),
+  ],
+  handleValidationErrors,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: 'User ID missing from route parameters.' });
+      return;
+    }
+
+    const contribution = await addGoalContribution(req.params.goalId, userId, req.body);
+    res.status(201).json(contribution);
+  })
+);
+
+// POST /api/users/:userId/goals/:goalId/sync - Sync goal with account balance
+router.post(
+  '/:goalId/sync',
+  [param('goalId').notEmpty()],
+  handleValidationErrors,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.params.userId;
+    if (!userId) {
+      res.status(400).json({ error: 'User ID missing from route parameters.' });
+      return;
+    }
+
+    const goal = await syncGoalWithAccount(req.params.goalId, userId);
+    if (!goal) {
+      res.status(404).json({ error: 'Goal not found' });
+      return;
+    }
+
+    res.json(goal);
   })
 );
 

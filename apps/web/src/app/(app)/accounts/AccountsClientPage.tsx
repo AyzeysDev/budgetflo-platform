@@ -33,6 +33,7 @@ import TransferForm from './TransferForm';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { PieChart, Pie, Tooltip } from 'recharts';
+import { cn } from '@/lib/utils';
 
 interface AccountsClientPageProps {
   initialAccounts: WebAppAccount[];
@@ -286,20 +287,30 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                         <div className="text-center">
                             <div className="flex items-center justify-center gap-1 text-sm font-medium">
                                 {netWorth > 0 ? (
-                                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                        <TrendingUp className="h-4 w-4" />
-                                        <span>Assets are up!</span>
-                                    </span>
+                                    <div className="flex flex-col items-center gap-1">
+                                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                            <TrendingUp className="h-4 w-4" />
+                                            <span>Net Positive</span>
+                                        </span>
+                                        <div className="text-xs text-muted-foreground">
+                                            Assets exceed liabilities by <span className="font-semibold text-green-600 dark:text-green-400">{((totalAssets / (totalDebts || 1)) * 100).toFixed(0)}%</span>
+                                        </div>
+                                    </div>
                                 ) : (
-                                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                        <TrendingDown className="h-4 w-4" />
-                                        <span>Liablities are up!</span>
-                                    </span>
+                                    <div className="flex flex-col items-center gap-1">
+                                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                            <TrendingDown className="h-4 w-4" />
+                                            <span>Net Deficit</span>
+                                        </span>
+                                        <div className="text-xs text-muted-foreground">
+                                            Liabilities exceed assets by <span className="font-semibold text-red-600 dark:text-red-400">{((totalDebts / (totalAssets || 1)) * 100).toFixed(0)}%</span>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                Based on current assets vs liabilities.
-                            </p>
+                            <div className="mt-2 text-xs text-muted-foreground">
+                                {netWorth > 0 ? 'Strong financial position' : 'Focus on debt reduction'}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -308,28 +319,55 @@ export default function AccountsClientPage({ initialAccounts }: AccountsClientPa
                         <div className="p-2.5 rounded-full bg-green-600/10 text-green-600 dark:text-green-400 mr-3">
                             <ArrowUpRight className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-sm text-muted-foreground">Total Assets</p>
                             <p className="text-xl font-semibold">{formatCurrency(totalAssets)}</p>
                         </div>
+                        {totalAssets > 0 && (
+                            <div className="text-right">
+                                <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                    {((totalAssets / (totalAssets + totalDebts)) * 100).toFixed(1)}%
+                                </div>
+                                <div className="text-xs text-muted-foreground">of total</div>
+                            </div>
+                        )}
                     </div>
                      <div className="flex items-center p-3 rounded-lg bg-muted/50 border">
                          <div className="p-2.5 rounded-full bg-red-600/10 text-red-600 dark:text-red-400 mr-3">
                             <ArrowDownRight className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-sm text-muted-foreground">Total Liabilities</p>
                             <p className="text-xl font-semibold">{formatCurrency(totalDebts)}</p>
                         </div>
+                        {totalDebts > 0 && (
+                            <div className="text-right">
+                                <div className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                    {((totalDebts / (totalAssets + totalDebts)) * 100).toFixed(1)}%
+                                </div>
+                                <div className="text-xs text-muted-foreground">of total</div>
+                            </div>
+                        )}
                     </div>
                      <div className="flex items-center p-3 rounded-lg bg-primary/10 border border-primary/20">
                          <div className="p-2.5 rounded-full bg-primary/20 text-primary mr-3">
                             <PieChartIcon className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-sm text-primary/80">Net Worth</p>
                             <p className="text-xl font-bold text-primary">{formatCurrency(netWorth)}</p>
                         </div>
+                        {(totalAssets > 0 || totalDebts > 0) && (
+                            <div className="text-right">
+                                <div className={cn(
+                                    "text-xs font-medium",
+                                    netWorth >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                                )}>
+                                    {netWorth >= 0 ? '+' : ''}{((netWorth / (totalAssets + totalDebts)) * 100).toFixed(1)}%
+                                </div>
+                                <div className="text-xs text-muted-foreground">health score</div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </CardContent>

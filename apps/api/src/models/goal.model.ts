@@ -11,7 +11,8 @@ export interface Goal {
   description: string | null;
   categoryId: string | null;
   linkedAccountId: string | null;
-  status: 'in_progress' | 'completed' | 'overdue';
+  isSyncedWithAccount: boolean;
+  status: 'in_progress' | 'completed';
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -52,15 +53,18 @@ export interface CreateGoalPayload {
   description?: string | null;
   categoryId?: string | null;
   linkedAccountId?: string | null;
+  isSyncedWithAccount?: boolean;
 }
 
 export interface UpdateGoalPayload {
   name?: string;
   targetAmount?: number;
+  currentAmount?: number;
   targetDate?: string;
   description?: string | null;
   categoryId?: string | null;
   linkedAccountId?: string | null;
+  isSyncedWithAccount?: boolean;
   isActive?: boolean;
 }
 

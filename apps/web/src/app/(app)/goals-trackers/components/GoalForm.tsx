@@ -25,7 +25,6 @@ import { CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { WebAppGoal, WebAppCreateGoalPayload, WebAppUpdateGoalPayload } from '@/types/goal';
-import type { WebAppCategory } from '@/types/budget';
 import type { WebAppAccount } from '@/types/account';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +35,6 @@ const goalSchema = z.object({
     required_error: "A target date is required.",
   }),
   description: z.string().optional(),
-  categoryId: z.string().optional(),
   linkedAccountId: z.string().optional(),
 });
 
@@ -47,12 +45,12 @@ interface GoalFormProps {
   onOpenChange: (open: boolean) => void;
   onSave: (goal: WebAppGoal) => void;
   editingGoal: WebAppGoal | null;
-  categories: WebAppCategory[];
   accounts: WebAppAccount[];
 }
 
-export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, categories, accounts }: GoalFormProps) {
+export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, accounts }: GoalFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [showWarning, setShowWarning] = React.useState(false);
 
   const {
     control,
@@ -73,7 +71,6 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
           targetAmount: editingGoal.targetAmount,
           targetDate: new Date(editingGoal.targetDate),
           description: editingGoal.description || '',
-          categoryId: editingGoal.categoryId || 'none',
           linkedAccountId: editingGoal.linkedAccountId || 'none',
         });
       } else {
@@ -82,7 +79,6 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
           targetAmount: 0,
           targetDate: new Date(),
           description: '',
-          categoryId: 'none',
           linkedAccountId: 'none',
         });
       }
@@ -91,7 +87,17 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
 
   const targetAmount = watch('targetAmount');
   const targetDate = watch('targetDate');
+  const linkedAccountId = watch('linkedAccountId');
   
+  // Check if switching from synced to manual
+  React.useEffect(() => {
+    if (editingGoal?.isSyncedWithAccount && linkedAccountId === 'none') {
+      setShowWarning(true);
+    } else {
+      setShowWarning(false);
+    }
+  }, [linkedAccountId, editingGoal]);
+
   const suggestedContribution = React.useMemo(() => {
     if (!targetAmount || !targetDate || targetAmount <= 0) return null;
     
@@ -117,11 +123,14 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
       const url = editingGoal ? `/api/goals/${editingGoal.goalId}` : '/api/goals';
       const method = editingGoal ? 'PUT' : 'POST';
       
+      // Auto-sync when account is selected (not 'none')
+      const shouldSync = !!(data.linkedAccountId && data.linkedAccountId !== 'none');
+      
       const payload: WebAppCreateGoalPayload | WebAppUpdateGoalPayload = {
         ...data,
         targetDate: format(data.targetDate, 'yyyy-MM-dd'),
-        categoryId: data.categoryId === 'none' ? null : data.categoryId,
         linkedAccountId: data.linkedAccountId === 'none' ? null : data.linkedAccountId,
+        isSyncedWithAccount: shouldSync,
       };
 
       const response = await fetch(url, {
@@ -200,25 +209,8 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
             <Textarea id="description" {...register('description')} placeholder="What is this goal for?" disabled={isSubmitting} rows={2}/>
           </div>
 
-          <div className="space-y-2">
-             <Label htmlFor="categoryId">Category (Optional)</Label>
-             <Controller
-                name="categoryId"
-                control={control}
-                render={({ field }) => (
-                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value} disabled={isSubmitting}>
-                        <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {categories.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
-                        </SelectContent>
-                    </Select>
-                )}
-             />
-           </div>
-
            <div className="space-y-2">
-             <Label htmlFor="linkedAccountId">Linked Account (Optional)</Label>
+             <Label htmlFor="linkedAccountId">Linked Savings Account (Optional)</Label>
              <Controller
                 name="linkedAccountId"
                 control={control}
@@ -226,13 +218,66 @@ export default function GoalForm({ isOpen, onOpenChange, onSave, editingGoal, ca
                     <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value} disabled={isSubmitting}>
                         <SelectTrigger><SelectValue placeholder="Select a savings account" /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {assetAccounts.map((a) => (<SelectItem key={a.accountId} value={a.accountId}>{a.name}</SelectItem>))}
+                            <SelectItem value="none">Manual Tracking</SelectItem>
+                            {assetAccounts.map((a) => (<SelectItem key={a.accountId} value={a.accountId}>{a.name} - {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(a.balance)}</SelectItem>))}
                         </SelectContent>
                     </Select>
                 )}
              />
+             <p className="text-xs text-muted-foreground">
+               Link to a savings account for automatic progress tracking, or choose manual tracking.
+             </p>
            </div>
+
+           {/* Auto-sync Status - Show when account is selected */}
+           {linkedAccountId && linkedAccountId !== 'none' && (
+             <div className="space-y-3 p-4 border rounded-lg bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/60 dark:border-emerald-800/40 backdrop-blur-sm">
+               <div className="space-y-2">
+                 <div className="flex items-center gap-2">
+                   <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                   <Label className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                     Auto-Sync Enabled
+                   </Label>
+                 </div>
+                 <p className="text-xs text-emerald-700/90 dark:text-emerald-300/90">
+                   Goal progress will automatically match your account balance
+                 </p>
+               </div>
+               {(() => {
+                 const selectedAccount = assetAccounts.find(acc => acc.accountId === linkedAccountId);
+                 return selectedAccount && (
+                   <div className="text-xs bg-white/60 dark:bg-emerald-900/50 p-3 rounded-lg border border-emerald-300/40 dark:border-emerald-700/40">
+                     <div className="flex items-center justify-between">
+                       <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+                         Account Balance:
+                       </span>
+                       <span className="text-emerald-800 dark:text-emerald-200 font-bold">
+                         {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(selectedAccount.balance)}
+                       </span>
+                     </div>
+                     <p className="text-emerald-600 dark:text-emerald-400 mt-1">
+                       ✓ Goal will start with this amount as progress
+                     </p>
+                   </div>
+                 );
+               })()}
+             </div>
+           )}
+
+           {/* Warning when switching from synced to manual */}
+           {showWarning && (
+             <div className="space-y-3 p-4 border rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40">
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                 <Label className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                   Warning: Switching to Manual Tracking
+                 </Label>
+               </div>
+               <p className="text-xs text-amber-700/90 dark:text-amber-300/90">
+                 Changing to manual tracking will reset your goal progress to $0. All previous contributions will be removed.
+               </p>
+             </div>
+           )}
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>

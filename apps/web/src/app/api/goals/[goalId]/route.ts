@@ -97,7 +97,7 @@ export async function DELETE(
       return NextResponse.json(error, { status: response.status });
     }
 
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json({}, { status: 204 });
   } catch (error) {
     console.error('Error deleting goal:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

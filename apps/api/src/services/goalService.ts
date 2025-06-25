@@ -5,8 +5,10 @@ import {
   GoalDTO,
   GoalContributionDTO,
   CreateGoalPayload,
+  CreateGoalContributionPayload,
   UpdateGoalPayload,
 } from '../models/goal.model';
+import { Account } from '../models/account.model';
 import { Timestamp, FieldValue, CollectionReference } from 'firebase-admin/firestore';
 
 if (!firebaseInitialized) {
@@ -28,6 +30,14 @@ function getGoalContributionsCollection(): CollectionReference<GoalContribution>
     throw new Error("Firestore is not initialized");
   }
   return firestoreInstance.collection('goal_contributions') as CollectionReference<GoalContribution>;
+}
+
+function getAccountsCollection(): CollectionReference<Account> {
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
+    throw new Error("Firestore is not initialized");
+  }
+  return firestoreInstance.collection('accounts') as CollectionReference<Account>;
 }
 
 // Convert Goal to DTO
@@ -56,15 +66,13 @@ function convertContributionToDTO(contribution: GoalContribution): GoalContribut
   };
 }
 
-// Update goal status based on date and progress
-function determineGoalStatus(targetDate: Date, currentAmount: number, targetAmount: number): 'in_progress' | 'completed' | 'overdue' {
+// Updated to always return 'in_progress' instead of 'overdue'
+function determineGoalStatus(targetDate: Date, currentAmount: number, targetAmount: number): 'in_progress' | 'completed' {
   if (currentAmount >= targetAmount) {
     return 'completed';
   }
-  if (new Date() > targetDate) {
-    return 'overdue';
-  }
-  return 'in_progress';
+  
+  return 'in_progress'; // Always return in_progress instead of overdue
 }
 
 /**
@@ -134,31 +142,69 @@ export async function _updateGoalProgress(t: FirebaseFirestore.Transaction, goal
 
 // Create a new goal
 export async function createGoal(userId: string, payload: CreateGoalPayload): Promise<GoalDTO> {
+  console.log('Creating goal with payload:', { userId, payload });
+  
   const goalsCollection = getGoalsCollection();
   const newGoalRef = goalsCollection.doc();
   
   const targetDate = new Date(payload.targetDate);
-  const status = determineGoalStatus(targetDate, 0, payload.targetAmount);
+  let currentAmount = 0;
+  let isSyncedWithAccount = false;
+
+  // If user wants to sync with account and has provided an account ID
+  if (payload.isSyncedWithAccount && payload.linkedAccountId) {
+    console.log('Attempting to sync with account:', payload.linkedAccountId);
+    try {
+      const accountDoc = await getAccountsCollection().doc(payload.linkedAccountId).get();
+      console.log('Account doc exists:', accountDoc.exists);
+      
+      if (accountDoc.exists) {
+        const account = accountDoc.data() as Account;
+        console.log('Account data:', account);
+        
+        if (account && typeof account.balance === 'number') {
+          currentAmount = account.balance;
+          isSyncedWithAccount = true;
+          console.log('Successfully synced goal with account balance:', currentAmount);
+        } else {
+          console.warn('Account balance is not a valid number:', account?.balance);
+        }
+      } else {
+        console.warn('Account document not found for ID:', payload.linkedAccountId);
+      }
+    } catch (error) {
+      console.error('Failed to sync with account during goal creation:', error);
+      // Continue with manual goal creation
+    }
+  }
+
+  const status = determineGoalStatus(targetDate, currentAmount, payload.targetAmount);
+  console.log('Goal status determined:', status, 'with currentAmount:', currentAmount);
 
   const newGoal: Goal = {
     goalId: newGoalRef.id,
     userId,
     name: payload.name,
     targetAmount: payload.targetAmount,
-    currentAmount: 0,
+    currentAmount,
     targetDate: Timestamp.fromDate(targetDate),
     description: payload.description || null,
     categoryId: payload.categoryId || null,
     linkedAccountId: payload.linkedAccountId || null,
+    isSyncedWithAccount,
     status,
     isActive: true,
     createdAt: FieldValue.serverTimestamp() as Timestamp,
     updatedAt: FieldValue.serverTimestamp() as Timestamp,
   };
 
+  console.log('Saving new goal:', newGoal);
   await newGoalRef.set(newGoal);
   const createdDoc = await newGoalRef.get();
-  return convertGoalToDTO(createdDoc.data() as Goal);
+  const result = convertGoalToDTO(createdDoc.data() as Goal);
+  console.log('Goal created successfully:', result);
+  
+  return result;
 }
 
 // Get all goals for a user
@@ -222,11 +268,44 @@ export async function updateGoal(goalId: string, userId: string, payload: Update
     updateData.targetDate = Timestamp.fromDate(new Date(payload.targetDate));
   }
 
-  // Update status if target date or amount changed
-  const newTargetDate = updateData.targetDate ? (updateData.targetDate as Timestamp).toDate() : (goal.targetDate as Timestamp).toDate();
-  const newTargetAmount = updateData.targetAmount || goal.targetAmount;
-  updateData.status = determineGoalStatus(newTargetDate, goal.currentAmount, newTargetAmount);
+  // Handle account switching logic
+  const wasLinkedToAccount = goal.linkedAccountId && goal.isSyncedWithAccount;
+  const willBeLinkedToAccount = payload.linkedAccountId && payload.isSyncedWithAccount;
+  const switchingToManual = wasLinkedToAccount && !payload.linkedAccountId;
+  const switchingAccount = wasLinkedToAccount && payload.linkedAccountId && 
+                          payload.linkedAccountId !== goal.linkedAccountId;
 
+  // Reset current amount when switching from synced to manual
+  if (switchingToManual) {
+    console.log('Switching from synced account to manual tracking - resetting progress');
+    updateData.currentAmount = 0;
+    updateData.isSyncedWithAccount = false;
+  }
+  // If switching to a new account and sync is enabled, get new account balance
+  else if ((switchingAccount || (!wasLinkedToAccount && willBeLinkedToAccount)) && payload.isSyncedWithAccount) {
+    console.log('Switching to account sync - fetching account balance');
+    try {
+      const accountDoc = await getAccountsCollection().doc(payload.linkedAccountId!).get();
+      if (accountDoc.exists) {
+        const account = accountDoc.data() as Account;
+        if (account && typeof account.balance === 'number') {
+          updateData.currentAmount = account.balance;
+          console.log('Updated goal with new account balance:', account.balance);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync with new account:', error);
+    }
+  }
+
+  // Update status based on new values
+  const newTargetDate = updateData.targetDate ? (updateData.targetDate as Timestamp).toDate() : (goal.targetDate as Timestamp).toDate();
+  const newTargetAmount = updateData.targetAmount !== undefined ? updateData.targetAmount : goal.targetAmount;
+  const newCurrentAmount = updateData.currentAmount !== undefined ? updateData.currentAmount : goal.currentAmount;
+  
+  updateData.status = determineGoalStatus(newTargetDate, newCurrentAmount, newTargetAmount);
+
+  console.log('Updating goal with data:', updateData);
   await goalRef.update(updateData);
   const updatedDoc = await goalRef.get();
   return convertGoalToDTO(updatedDoc.data() as Goal);
@@ -287,6 +366,116 @@ export async function getGoalContributions(goalId: string, userId: string): Prom
   }
 
   return snapshot.docs.map(doc => convertContributionToDTO(doc.data()));
+}
+
+// Add goal contribution function
+export async function addGoalContribution(
+  goalId: string, 
+  userId: string, 
+  payload: CreateGoalContributionPayload
+): Promise<GoalContributionDTO> {
+  // First verify the user owns the goal
+  const goal = await getGoalById(goalId, userId);
+  if (!goal) {
+    throw new Error('Goal not found or unauthorized');
+  }
+
+  const contributionsCollection = getGoalContributionsCollection();
+  const newContributionRef = contributionsCollection.doc();
+  
+  const contributionDate = payload.date ? new Date(payload.date) : new Date();
+
+  const newContribution: GoalContribution = {
+    contributionId: newContributionRef.id,
+    goalId,
+    userId,
+    amount: payload.amount,
+    date: Timestamp.fromDate(contributionDate),
+    source: 'manual',
+    transactionId: payload.transactionId || null,
+    notes: payload.notes || null,
+    createdAt: FieldValue.serverTimestamp() as Timestamp,
+  };
+
+  // Use a transaction to ensure consistency - FIX: Do all reads before writes
+  const firestoreInstance = firestore;
+  if (!firestoreInstance) {
+    throw new Error("Firestore is not initialized");
+  }
+
+  await firestoreInstance.runTransaction(async (transaction) => {
+    // READ PHASE - Do all reads first
+    const goalRef = getGoalsCollection().doc(goalId);
+    const goalDoc = await transaction.get(goalRef);
+    
+    if (!goalDoc.exists) {
+      throw new Error('Goal not found');
+    }
+
+    const currentGoal = goalDoc.data() as Goal;
+    
+    // Calculate new values
+    const newCurrentAmount = currentGoal.currentAmount + payload.amount;
+    const newStatus = determineGoalStatus(
+      (currentGoal.targetDate as Timestamp).toDate(),
+      newCurrentAmount,
+      currentGoal.targetAmount
+    );
+
+    // WRITE PHASE - Do all writes after reads
+    transaction.set(newContributionRef, newContribution);
+    transaction.update(goalRef, {
+      currentAmount: newCurrentAmount,
+      status: newStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  const createdDoc = await newContributionRef.get();
+  return convertContributionToDTO(createdDoc.data() as GoalContribution);
+}
+
+// Add function to sync goal with current account balance
+export async function syncGoalWithAccount(goalId: string, userId: string): Promise<GoalDTO | null> {
+  const goalRef = getGoalsCollection().doc(goalId);
+  const goalDoc = await goalRef.get();
+
+  if (!goalDoc.exists) {
+    return null;
+  }
+
+  const goal = goalDoc.data() as Goal;
+  
+  if (goal.userId !== userId) {
+    throw new Error('Unauthorized access to goal');
+  }
+
+  if (!goal.linkedAccountId) {
+    throw new Error('Goal is not linked to an account');
+  }
+
+  // Get current account balance
+  const accountDoc = await getAccountsCollection().doc(goal.linkedAccountId).get();
+  if (!accountDoc.exists) {
+    throw new Error('Linked account not found');
+  }
+
+  const account = accountDoc.data() as Account;
+  const newStatus = determineGoalStatus(
+    (goal.targetDate as Timestamp).toDate(),
+    account.balance,
+    goal.targetAmount
+  );
+
+  const updateData = {
+    currentAmount: account.balance,
+    status: newStatus,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await goalRef.update(updateData);
+  const updatedDoc = await goalRef.get();
+  return convertGoalToDTO(updatedDoc.data() as Goal);
 }
 
 /*
