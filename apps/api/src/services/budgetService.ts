@@ -605,8 +605,12 @@ export async function getOverallBudgetForPeriod(
       month: month ? String(month) : undefined
     });
     
-    // Filter for expenses that are not part of any category budget
-    const relevantTransactions = transactions.filter(t => t.type === 'expense' && !t.categoryId);
+    // Filter for expenses that have categories (exclude transfers and uncategorized expenses)
+    const relevantTransactions = transactions.filter(t => 
+      t.type === 'expense' && 
+      t.categoryId && 
+      t.source !== 'account_transfer'
+    );
     
     const spentAmount = relevantTransactions.reduce((sum, t) => sum + t.amount, 0);
     budgetToReturn.spentAmount = spentAmount;
@@ -832,13 +836,13 @@ export async function getMonthlyBudget(
     const monthlyBudgetRef = monthlyBudgetsCollection.doc(documentId);
     const monthlyBudgetDoc = await monthlyBudgetRef.get();
     
-    // Check if cached data exists and is recent (within last hour)
+    // Check if cached data exists and is recent (within last 5 minutes for immediate fix application)
     if (monthlyBudgetDoc.exists) {
       const data = monthlyBudgetDoc.data() as MonthlyBudget;
       const lastUpdate = data.updatedAt.toDate();
-      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       
-      if (lastUpdate > hourAgo) {
+      if (lastUpdate > fiveMinutesAgo) {
         return data;
       }
     }
@@ -917,10 +921,10 @@ export async function getMonthlyBudget(
       month: month.toString()
     });
     
-    // Calculate spending per category
+    // Calculate spending per category (exclude transfers and uncategorized expenses)
     let totalSpent = 0;
     for (const transaction of transactions) {
-      if (transaction.type === 'expense' && transaction.categoryId) {
+      if (transaction.type === 'expense' && transaction.categoryId && transaction.source !== 'account_transfer') {
         if (categoryBreakdown[transaction.categoryId]) {
           categoryBreakdown[transaction.categoryId].spent += transaction.amount;
         }
@@ -976,9 +980,9 @@ export async function getCategoryBudgetsForPeriod(
     // Add regular budgets to the map and recalculate their spent amounts for this month
     for (const budget of regularBudgets) {
       if (budget.categoryId) {
-        // Recalculate spent amount for this specific month
+        // Recalculate spent amount for this specific month (exclude transfers)
         const categoryTransactions = transactions.filter(t => 
-          t.type === 'expense' && t.categoryId === budget.categoryId
+          t.type === 'expense' && t.categoryId === budget.categoryId && t.source !== 'account_transfer'
         );
         const spentAmount = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
         
@@ -1035,9 +1039,9 @@ export async function getCategoryBudgetsForPeriod(
           // This recurring budget applies to this month
           // If there's no regular budget for this category, create a virtual one from the recurring budget
           if (!budgetMap.has(recurringBudget.categoryId)) {
-            // Calculate spent amount for this category using the transactions we already fetched
+            // Calculate spent amount for this category using the transactions we already fetched (exclude transfers)
             const categoryTransactions = transactions.filter(t => 
-              t.type === 'expense' && t.categoryId === recurringBudget.categoryId
+              t.type === 'expense' && t.categoryId === recurringBudget.categoryId && t.source !== 'account_transfer'
             );
             
             const spentAmount = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
