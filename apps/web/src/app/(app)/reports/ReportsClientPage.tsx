@@ -125,48 +125,103 @@ export default function ReportsClientPage({
 
   // Net Worth calculation
   const { netWorth, totalAssets, totalDebts, netWorthHistory } = useMemo(() => {
+    // Calculate current net worth
     const currentNetWorth = accounts.reduce((acc, account) => {
       const balance = account.balance;
       if (LIABILITY_TYPES.includes(account.type as any)) {
-        acc.totalDebts += balance;
+        // For liabilities, the balance represents debt owed (positive number)
+        // This reduces net worth, so we add it to totalDebts
+        acc.totalDebts += Math.abs(balance);
       } else {
+        // For assets, positive balance increases net worth
         acc.totalAssets += balance;
       }
       return acc;
     }, { totalAssets: 0, totalDebts: 0 });
 
+    // Find the earliest account creation date
+    const earliestAccountDate = accounts.length > 0 
+      ? new Date(Math.min(...accounts.map(account => new Date(account.createdAt).getTime())))
+      : new Date();
+    
+    // Create historical net worth data
     const startDate = getTimeRangeDate(selectedTimeRange);
     const endDate = new Date();
     const history = [];
     const current = new Date(startDate);
 
+    // Create a map to track balance changes by account over time
+    const accountBalanceHistory = new Map<string, Array<{date: Date, amount: number, type: 'income' | 'expense'}>>();
+    
+    // Group transactions by account
+    accounts.forEach(account => {
+      const accountTransactions = transactions
+        .filter(t => t.accountId === account.accountId)
+        .map(t => ({
+          date: new Date(t.date),
+          amount: t.amount,
+          type: t.type
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+      
+      accountBalanceHistory.set(account.accountId, accountTransactions);
+    });
+
+    // Generate monthly history
     while (current <= endDate) {
       const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
-      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Check if this month is before the earliest account creation
+      const isBeforeAccountCreation = monthEnd < earliestAccountDate;
+      
       let monthAssets = 0;
       let monthLiabilities = 0;
       
-      accounts.forEach(account => {
-        let balance = account.balance;
-        const futureTransactions = transactions.filter(t => 
-          t.accountId === account.accountId && new Date(t.date) > monthEnd
-        );
-        futureTransactions.forEach(t => {
-          balance += t.type === 'income' ? -t.amount : t.amount;
+      if (!isBeforeAccountCreation) {
+        accounts.forEach(account => {
+          const accountCreatedDate = new Date(account.createdAt);
+          
+          // Only include this account if it existed during this month
+          if (monthEnd >= accountCreatedDate) {
+            // Start with current balance and work backwards
+            let historicalBalance = account.balance;
+            
+            // Get transactions after this month and reverse their effect
+            const accountTxns = accountBalanceHistory.get(account.accountId) || [];
+            const futureTransactions = accountTxns.filter(t => t.date > monthEnd);
+            
+            // Reverse the effect of future transactions to get historical balance
+            futureTransactions.forEach(txn => {
+              if (LIABILITY_TYPES.includes(account.type as any)) {
+                // For liability accounts (credit cards, loans)
+                // Income reduces the balance (payment), expense increases it (new charges)
+                historicalBalance += txn.type === 'income' ? txn.amount : -txn.amount;
+              } else {
+                // For asset accounts (checking, savings)
+                // Income increases balance, expense decreases it
+                historicalBalance += txn.type === 'income' ? -txn.amount : txn.amount;
+              }
+            });
+            
+            // Categorize the historical balance
+            if (LIABILITY_TYPES.includes(account.type as any)) {
+              monthLiabilities += Math.abs(historicalBalance);
+            } else {
+              monthAssets += historicalBalance;
+            }
+          }
         });
-        if (LIABILITY_TYPES.includes(account.type as any)) {
-          monthLiabilities += balance;
-        } else {
-          monthAssets += balance;
-        }
-      });
+      }
       
       history.push({
         month: monthStart.toLocaleDateString('default', { month: 'short', year: '2-digit' }),
+        date: new Date(monthStart),
         netWorth: monthAssets - monthLiabilities,
         assets: monthAssets,
         liabilities: monthLiabilities,
       });
+      
       current.setMonth(current.getMonth() + 1);
     }
 
@@ -174,7 +229,7 @@ export default function ReportsClientPage({
       netWorth: currentNetWorth.totalAssets - currentNetWorth.totalDebts,
       totalAssets: currentNetWorth.totalAssets,
       totalDebts: currentNetWorth.totalDebts,
-      netWorthHistory: history,
+      netWorthHistory: history.sort((a, b) => a.date.getTime() - b.date.getTime()),
     };
   }, [accounts, transactions, selectedTimeRange, getTimeRangeDate]);
 
@@ -355,99 +410,256 @@ export default function ReportsClientPage({
       </div>
 
       <Tabs defaultValue="networth" className="w-full">
-        <div className="flex justify-center">
-          <TabsList className="inline-grid w-auto grid-cols-4 bg-muted/50 p-2 rounded-2xl border">
-              <TabsTrigger value="networth"><TrendingUp className="h-4 w-4 mr-2" />Net Worth</TabsTrigger>
-              <TabsTrigger value="income"><BarChart3 className="h-4 w-4 mr-2" />Income vs Expenses</TabsTrigger>
-              <TabsTrigger value="budget"><Target className="h-4 w-4 mr-2" />Budget Metrics</TabsTrigger>
-              <TabsTrigger value="flow"><ArrowRightLeft className="h-4 w-4 mr-2" />Account Flow</TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="networth"><TrendingUp className="h-4 w-4 mr-2" />Net Worth</TabsTrigger>
+          <TabsTrigger value="income"><BarChart3 className="h-4 w-4 mr-2" />Income vs Expenses</TabsTrigger>
+          <TabsTrigger value="budget"><Target className="h-4 w-4 mr-2" />Budget Metrics</TabsTrigger>
+          <TabsTrigger value="flow"><ArrowRightLeft className="h-4 w-4 mr-2" />Account Flow</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="networth" className="mt-6">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Net Worth Analytics</CardTitle>
+          <Card className="pt-0 shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Net Worth Analytics
+              </CardTitle>
               <CardDescription>Track your wealth growth month over month</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-0">
               <div className="lg:col-span-2">
-                <ChartContainer config={chartConfig} className="h-[350px]">
+                <ChartContainer config={chartConfig} className="h-[380px]">
                   <LineChart data={netWorthHistory}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted) / 0.5)" />
-                    <XAxis dataKey="month" />
-                    <YAxis tickFormatter={formatNumber} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--muted))" strokeOpacity={0.4} />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tickFormatter={formatNumber} 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={2} />
-                    <Line type="monotone" dataKey="assets" stroke="var(--color-assets)" strokeWidth={1.5} strokeDasharray="5 5" />
-                    <Line type="monotone" dataKey="liabilities" stroke="var(--color-liabilities)" strokeWidth={1.5} strokeDasharray="5 5" />
+                    <Line 
+                      type="monotone" 
+                      dataKey="netWorth" 
+                      stroke="var(--color-netWorth)" 
+                      strokeWidth={3} 
+                      dot={{ fill: "var(--color-netWorth)", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6, stroke: "var(--color-netWorth)", strokeWidth: 2 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="assets" 
+                      stroke="var(--color-assets)" 
+                      strokeWidth={2} 
+                      strokeDasharray="6 4" 
+                      dot={{ fill: "var(--color-assets)", r: 3 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="liabilities" 
+                      stroke="var(--color-liabilities)" 
+                      strokeWidth={2} 
+                      strokeDasharray="6 4" 
+                      dot={{ fill: "var(--color-liabilities)", r: 3 }}
+                    />
                   </LineChart>
                 </ChartContainer>
               </div>
               <div className="lg:col-span-1 space-y-4">
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />Total Assets</div><p className="text-2xl font-bold mt-1">{formatCurrency(totalAssets)}</p></div>
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />Total Liabilities</div><p className="text-2xl font-bold mt-1">{formatCurrency(totalDebts)}</p></div>
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-primary" />Net Worth</div><p className="text-2xl font-bold mt-1">{formatCurrency(netWorth)}</p></div>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/40 border border-emerald-200/60 shadow-sm backdrop-blur-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-emerald-700">Total Assets</span>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalAssets)}</p>
+                </div>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-red-50/80 to-red-100/40 border border-red-200/60 shadow-sm backdrop-blur-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-3 w-3 rounded-full bg-red-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-red-700">Total Liabilities</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-900">{formatCurrency(totalDebts)}</p>
+                </div>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-indigo-50/80 to-indigo-100/40 border border-indigo-200/60 shadow-sm backdrop-blur-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-3 w-3 rounded-full bg-indigo-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-indigo-700">Net Worth</span>
+                  </div>
+                  <p className="text-2xl font-bold text-indigo-900">{formatCurrency(netWorth)}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="income" className="mt-6">
-           <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Income vs Expense</CardTitle>
+           <Card className="pt-0 shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                Income vs Expense
+              </CardTitle>
               <CardDescription>Monthly cash flow analysis with surplus/deficit tracking</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-0">
               <div className="lg:col-span-2">
-                <ChartContainer config={chartConfig} className="h-[350px]">
+                <ChartContainer config={chartConfig} className="h-[380px]">
                   <ComposedChart data={incomeVsExpenseData}>
-                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis tickFormatter={formatNumber} /><ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="income" fill="var(--color-income)" /><Bar dataKey="expense" fill="var(--color-expense)" /><Line type="monotone" dataKey="surplus" stroke="var(--color-surplus)" strokeWidth={2} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--muted))" strokeOpacity={0.4} />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tickFormatter={formatNumber} 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="income" fill="var(--color-income)" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="expense" fill="var(--color-expense)" radius={[2, 2, 0, 0]} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="surplus" 
+                      stroke="var(--color-surplus)" 
+                      strokeWidth={3}
+                      dot={{ fill: "var(--color-surplus)", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6, stroke: "var(--color-surplus)", strokeWidth: 2 }}
+                    />
                   </ComposedChart>
                 </ChartContainer>
               </div>
               <div className="lg:col-span-1 space-y-4">
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />Total Income</div><p className="text-2xl font-bold mt-1">{formatCurrency(overviewMetrics.totalIncome)}</p></div>
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />Total Expense</div><p className="text-2xl font-bold mt-1">{formatCurrency(overviewMetrics.totalExpense)}</p></div>
-                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className={`flex h-2 w-2 shrink-0 rounded-full ${overviewMetrics.totalSurplus >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`} />Net Flow</div><p className={`text-2xl font-bold mt-1 ${overviewMetrics.totalSurplus >= 0 ? 'text-foreground' : 'text-orange-500'}`}>{formatCurrency(overviewMetrics.totalSurplus)}</p></div>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/40 border border-emerald-200/60 shadow-sm backdrop-blur-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-emerald-700">Total Income</span>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(overviewMetrics.totalIncome)}</p>
+                </div>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-red-50/80 to-red-100/40 border border-red-200/60 shadow-sm backdrop-blur-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-3 w-3 rounded-full bg-red-500 shadow-sm"></div>
+                    <span className="text-sm font-medium text-red-700">Total Expense</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-900">{formatCurrency(overviewMetrics.totalExpense)}</p>
+                </div>
+                <div className={`p-5 rounded-xl shadow-sm backdrop-blur-sm ${overviewMetrics.totalSurplus >= 0 ? 'bg-gradient-to-br from-blue-50/80 to-blue-100/40 border border-blue-200/60' : 'bg-gradient-to-br from-orange-50/80 to-orange-100/40 border border-orange-200/60'}`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`h-3 w-3 rounded-full shadow-sm ${overviewMetrics.totalSurplus >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                    <span className={`text-sm font-medium ${overviewMetrics.totalSurplus >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Net Flow</span>
+                  </div>
+                  <p className={`text-2xl font-bold ${overviewMetrics.totalSurplus >= 0 ? 'text-blue-900' : 'text-orange-900'}`}>{formatCurrency(overviewMetrics.totalSurplus)}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="budget" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader><CardTitle>Budget vs Actual Spending</CardTitle><CardDescription>Track how well you're sticking to your monthly budgets</CardDescription></CardHeader>
+          <Card className="pt-0 shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Target className="h-5 w-5 text-primary" />
+                Budget vs Actual Spending
+              </CardTitle>
+              <CardDescription>Track how well you're sticking to your monthly budgets</CardDescription>
+            </CardHeader>
             <CardContent>
-              {isLoadingBudgets ? (<div className="flex items-center justify-center h-[400px]"><RefreshCw className="h-8 w-8 animate-spin text-primary" /><span className="ml-2 text-muted-foreground">Loading...</span></div>
+              {isLoadingBudgets ? (
+                <div className="flex items-center justify-center h-[400px]">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading...</span>
+                </div>
               ) : budgetData.length > 0 ? (
                 <ChartContainer config={{budgeted: {label: 'Budgeted', color: '#0ea5e9'}, spent: {label: 'Spent', color: '#f59e0b'}, variance: {label: 'Variance', color: '#8b5cf6'}}} className="h-[400px]">
                   <ComposedChart data={budgetData}>
-                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="monthName" /><YAxis tickFormatter={formatNumber} /><ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="totalBudgeted" fill="var(--color-budgeted)" name="Budgeted" /><Bar dataKey="totalSpent" fill="var(--color-spent)" name="Spent" />
-                    <Line type="monotone" dataKey={(d: any) => d.totalSpent - d.totalBudgeted} stroke="var(--color-variance)" strokeWidth={3} name="Over/Under" />
+                    <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--muted))" strokeOpacity={0.4} />
+                    <XAxis 
+                      dataKey="monthName" 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tickFormatter={formatNumber} 
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="totalBudgeted" fill="var(--color-budgeted)" name="Budgeted" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="totalSpent" fill="var(--color-spent)" name="Spent" radius={[2, 2, 0, 0]} />
+                    <Line 
+                      type="monotone" 
+                      dataKey={(d: any) => d.totalSpent - d.totalBudgeted} 
+                      stroke="var(--color-variance)" 
+                      strokeWidth={3} 
+                      name="Over/Under"
+                      dot={{ fill: "var(--color-variance)", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6, stroke: "var(--color-variance)", strokeWidth: 2 }}
+                    />
                   </ComposedChart>
                 </ChartContainer>
-              ) : (<div className="text-center py-12"><Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" /><p>No budget data for this period.</p></div>)}
+              ) : (
+                <div className="text-center py-16">
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-muted/20 flex items-center justify-center">
+                    <Target className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <p className="text-muted-foreground">No budget data for this period.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
           {budgetData.length > 0 && (
-            <Card><CardHeader><CardTitle>Monthly Budget Details</CardTitle></CardHeader>
+            <Card className="pt-0 shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl">Monthly Budget Details</CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
                 {budgetData.slice(-6).reverse().map((month) => {
                   const variance = month.totalSpent - month.totalBudgeted;
                   const percentage = month.totalBudgeted > 0 ? (month.totalSpent / month.totalBudgeted) * 100 : 0;
                   return (
-                    <div key={month.monthName} className="p-4 rounded-lg border bg-card">
-                      <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">{month.fullDate}</h3><Badge variant={variance > 0 ? "destructive" : "default"}>{variance > 0 ? '+' : ''}{formatCurrency(variance)}</Badge></div>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div><span className="text-muted-foreground">Budgeted:</span><p>{formatCurrency(month.totalBudgeted)}</p></div>
-                        <div><span className="text-muted-foreground">Spent:</span><p>{formatCurrency(month.totalSpent)}</p></div>
-                        <div><span className="text-muted-foreground">Performance:</span><p className={cn(variance > 0 ? "text-destructive" : "text-green-600")}>{percentage.toFixed(1)}%</p></div>
+                    <div key={month.monthName} className="p-5 rounded-xl bg-card/50 border border-border/50 backdrop-blur-sm shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-lg">{month.fullDate}</h3>
+                        <Badge 
+                          variant={variance > 0 ? "destructive" : "default"} 
+                          className="font-mono shadow-sm"
+                        >
+                          {variance > 0 ? '+' : ''}{formatCurrency(variance)}
+                        </Badge>
                       </div>
-                      <Progress value={Math.min(percentage, 100)} className="mt-3" />
+                      <div className="grid grid-cols-3 gap-6 text-sm mb-4">
+                        <div className="text-center">
+                          <span className="text-muted-foreground block mb-1">Budgeted</span>
+                          <p className="font-semibold text-lg">{formatCurrency(month.totalBudgeted)}</p>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-muted-foreground block mb-1">Spent</span>
+                          <p className="font-semibold text-lg">{formatCurrency(month.totalSpent)}</p>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-muted-foreground block mb-1">Performance</span>
+                          <p className={cn("font-semibold text-lg", variance > 0 ? "text-destructive" : "text-green-600")}>
+                            {percentage.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                      <Progress 
+                        value={Math.min(percentage, 100)} 
+                        className={cn("h-2", percentage > 100 && "[&>*]:bg-destructive")} 
+                      />
                     </div>
                   );
                 })}
@@ -457,25 +669,86 @@ export default function ReportsClientPage({
         </TabsContent>
 
         <TabsContent value="flow" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader><CardTitle>Account Flow Analysis</CardTitle><CardDescription>View of money movement across all accounts</CardDescription></CardHeader>
+          <Card className="pt-0 shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <ArrowRightLeft className="h-5 w-5 text-primary" />
+                Account Flow Analysis
+              </CardTitle>
+              <CardDescription>View of money movement across all accounts</CardDescription>
+            </CardHeader>
             <CardContent className="space-y-6">
               <ChartContainer config={{inflow: {label: 'Inflow', color: ASSET_COLOR}, outflow: {label: 'Outflow', color: LIABILITY_COLOR}}} className="h-[400px]">
-                <BarChart data={accountFlow} layout="vertical"><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" tickFormatter={formatNumber} /><YAxis dataKey="name" type="category" width={120} /><ChartTooltip content={<ChartTooltipContent />} /><Bar dataKey="inflow" fill="var(--color-inflow)" name="Inflow" /><Bar dataKey="outflow" fill="var(--color-outflow)" name="Outflow" /></BarChart>
+                <BarChart data={accountFlow} layout="vertical">
+                  <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--muted))" strokeOpacity={0.4} />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={formatNumber} 
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    width={120} 
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="inflow" fill="var(--color-inflow)" name="Inflow" radius={[0, 2, 2, 0]} />
+                  <Bar dataKey="outflow" fill="var(--color-outflow)" name="Outflow" radius={[0, 2, 2, 0]} />
+                </BarChart>
               </ChartContainer>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {accountFlow.map((account) => {
                   const totalFlow = account.inflow + account.outflow;
                   const isPositiveFlow = account.netFlow >= 0;
                   return (
-                    <div key={account.accountId} className={cn("p-6 rounded-xl border-2", isPositiveFlow ? "bg-green-50 dark:bg-green-950 border-green-200" : "bg-red-50 dark:bg-red-950 border-red-200")}>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3"><div className={cn("p-3 rounded-full", isPositiveFlow ? "bg-green-100" : "bg-red-100")}><Wallet className={cn("h-5 w-5", isPositiveFlow ? "text-green-600" : "text-red-600")} /></div><div><h3 className="font-bold text-lg">{account.name}</h3><p className="text-sm text-muted-foreground">{totalFlow > 0 ? `${((account.inflow / totalFlow) * 100).toFixed(0)}% inflow` : 'No activity'}</p></div></div>
-                        <Badge variant={isPositiveFlow ? "default" : "destructive"}>{isPositiveFlow ? '+' : ''}{formatCurrency(account.netFlow)}</Badge>
+                    <div key={account.accountId} className={cn("p-6 rounded-xl border backdrop-blur-sm shadow-sm", isPositiveFlow ? "bg-gradient-to-br from-green-50/80 to-green-100/40 border-green-200/60" : "bg-gradient-to-br from-red-50/80 to-red-100/40 border-red-200/60")}>
+                      <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("p-3 rounded-full shadow-sm", isPositiveFlow ? "bg-green-100" : "bg-red-100")}>
+                            <Wallet className={cn("h-6 w-6", isPositiveFlow ? "text-green-600" : "text-red-600")} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg">{account.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {totalFlow > 0 ? `${((account.inflow / totalFlow) * 100).toFixed(0)}% inflow` : 'No activity'}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge 
+                          variant={isPositiveFlow ? "default" : "destructive"} 
+                          className="font-mono shadow-sm"
+                        >
+                          {isPositiveFlow ? '+' : ''}{formatCurrency(account.netFlow)}
+                        </Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2"><div className="flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-green-600" /><span className="text-sm">Income</span></div><p className="text-2xl font-bold">{formatCurrency(account.inflow)}</p><Progress value={totalFlow > 0 ? (account.inflow / totalFlow) * 100 : 0} className="h-2 bg-green-100" /></div>
-                        <div className="space-y-2"><div className="flex items-center gap-2"><ArrowDownRight className="h-4 w-4 text-red-600" /><span className="text-sm">Expense</span></div><p className="text-2xl font-bold">{formatCurrency(account.outflow)}</p><Progress value={totalFlow > 0 ? (account.outflow / totalFlow) * 100 : 0} className="h-2 bg-red-100" /></div>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <ArrowUpRight className="h-4 w-4 text-green-600" />
+                            <span className="text-sm font-medium">Income</span>
+                          </div>
+                          <p className="text-2xl font-bold text-green-900">{formatCurrency(account.inflow)}</p>
+                          <Progress 
+                            value={totalFlow > 0 ? (account.inflow / totalFlow) * 100 : 0} 
+                            className="h-2" 
+                          />
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <ArrowDownRight className="h-4 w-4 text-red-600" />
+                            <span className="text-sm font-medium">Expense</span>
+                          </div>
+                          <p className="text-2xl font-bold text-red-900">{formatCurrency(account.outflow)}</p>
+                          <Progress 
+                            value={totalFlow > 0 ? (account.outflow / totalFlow) * 100 : 0} 
+                            className="h-2" 
+                          />
+                        </div>
                       </div>
                     </div>
                   );
