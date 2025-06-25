@@ -349,8 +349,22 @@ export async function createTransfer(userId: string, payload: CreateTransferPayl
         t.set(fromTransactionRef, fromTransaction);
         t.set(toTransactionRef, toTransaction);
         
-        t.update(fromAccountRef, { balance: FieldValue.increment(-payload.amount) });
-        t.update(toAccountRef, { balance: FieldValue.increment(payload.amount) });
+        // Calculate balance changes based on account types
+        const fromIsLiability = (LIABILITY_TYPES as readonly string[]).includes(fromAccountData.type);
+        const toIsLiability = (LIABILITY_TYPES as readonly string[]).includes(toAccountData.type);
+        
+        // For "from" account (expense transaction):
+        // - Asset: decrease balance (you have less money)
+        // - Liability: increase balance (you owe more, borrowing)
+        const fromBalanceChange = fromIsLiability ? payload.amount : -payload.amount;
+        
+        // For "to" account (income transaction):
+        // - Asset: increase balance (you have more money)
+        // - Liability: decrease balance (you owe less, paying down debt)
+        const toBalanceChange = toIsLiability ? -payload.amount : payload.amount;
+        
+        t.update(fromAccountRef, { balance: FieldValue.increment(fromBalanceChange) });
+        t.update(toAccountRef, { balance: FieldValue.increment(toBalanceChange) });
     });
 
     const fromDoc = await fromTransactionRef.get();
