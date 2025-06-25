@@ -4,19 +4,18 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   BarChart3,
   TrendingUp,
-  TrendingDown,
-  Filter,
   Download,
   RefreshCw,
   Target,
-  ArrowUpRight,
-  ArrowDownRight,
   ArrowRightLeft,
   Wallet,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -25,14 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { WebAppAccount } from '@/types/account';
 import type { WebAppCategory } from '@/types/budget';
 import type { WebAppTransaction } from '@/types/transaction';
-import { ASSET_TYPES, LIABILITY_TYPES } from '@/types/account';
-import { IconRenderer, AvailableIconName } from '../categories/categoryUtils';
+import { LIABILITY_TYPES } from '@/types/account';
 import {
   ChartContainer,
   ChartTooltip,
@@ -42,25 +39,13 @@ import {
 import {
   LineChart,
   Line,
-  BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
+  BarChart,
   XAxis,
   YAxis,
   CartesianGrid,
   ComposedChart,
-  Area,
-  AreaChart,
 } from 'recharts';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
 
 interface ReportsClientPageProps {
   initialAccounts: WebAppAccount[];
@@ -84,12 +69,6 @@ const getMonthName = (month: number) => {
   return new Date(2000, month - 1, 1).toLocaleString('default', { month: 'long' });
 };
 
-const CHART_COLORS = [
-  '#02a141', '#990f0f', '#0ea5e9', '#f59e0b', '#8b5cf6',
-  '#ef4444', '#10b981', '#f97316', '#6366f1', '#ec4899',
-  '#14b8a6', '#f59e0b', '#8b5cf6', '#06b6d4', '#84cc16'
-];
-
 const ASSET_COLOR = "#02a141";
 const LIABILITY_COLOR = "#990f0f";
 
@@ -107,7 +86,6 @@ export default function ReportsClientPage({
   const [selectedTimeRange, setSelectedTimeRange] = useState<'3m' | '6m' | '12m' | 'all'>('6m');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
-  const [selectedReportType, setSelectedReportType] = useState<'overview' | 'budget' | 'flow'>('overview');
   
   // Additional state for budget data
   const [budgetData, setBudgetData] = useState<any[]>([]);
@@ -125,14 +103,27 @@ export default function ReportsClientPage({
         return new Date(now.getFullYear(), now.getMonth() - 12, 1);
       case 'all':
       default:
-        // Find earliest transaction date
         if (transactions.length === 0) return new Date(now.getFullYear() - 1, 0, 1);
         const earliestDate = new Date(Math.min(...transactions.map(t => new Date(t.date).getTime())));
         return new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1);
     }
   }, [transactions]);
 
-  // Net Worth calculation with accurate historical data
+  // Filter transactions based on selected filters
+  const filteredTransactions = useMemo(() => {
+    let filtered = [...transactions];
+    const cutoffDate = getTimeRangeDate(selectedTimeRange);
+    filtered = filtered.filter(t => new Date(t.date) >= cutoffDate);
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(t => t.categoryId === selectedCategory);
+    }
+    if (selectedAccount !== 'all') {
+      filtered = filtered.filter(t => t.accountId === selectedAccount);
+    }
+    return filtered;
+  }, [transactions, selectedTimeRange, selectedCategory, selectedAccount, getTimeRangeDate]);
+
+  // Net Worth calculation
   const { netWorth, totalAssets, totalDebts, netWorthHistory } = useMemo(() => {
     const currentNetWorth = accounts.reduce((acc, account) => {
       const balance = account.balance;
@@ -141,47 +132,28 @@ export default function ReportsClientPage({
       } else {
         acc.totalAssets += balance;
       }
-      acc.netWorth = acc.totalAssets - acc.totalDebts;
       return acc;
-    }, { netWorth: 0, totalAssets: 0, totalDebts: 0 });
+    }, { totalAssets: 0, totalDebts: 0 });
 
-    // Generate accurate historical data based on transactions
     const startDate = getTimeRangeDate(selectedTimeRange);
     const endDate = new Date();
     const history = [];
-    
-    // Create monthly buckets from start to end
     const current = new Date(startDate);
+
     while (current <= endDate) {
       const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
       const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
-      
-      // Calculate net worth at end of this month by simulating account balances
       let monthAssets = 0;
       let monthLiabilities = 0;
       
-      // For each account, calculate balance at end of month
       accounts.forEach(account => {
-        const accountTransactions = transactions.filter(t => 
-          t.accountId === account.accountId && 
-          new Date(t.date) <= monthEnd
-        );
-        
         let balance = account.balance;
-        // Subtract transactions that happened after this month to get historical balance
         const futureTransactions = transactions.filter(t => 
-          t.accountId === account.accountId && 
-          new Date(t.date) > monthEnd
+          t.accountId === account.accountId && new Date(t.date) > monthEnd
         );
-        
         futureTransactions.forEach(t => {
-          if (t.type === 'income') {
-            balance -= t.amount;
-          } else {
-            balance += t.amount;
-          }
+          balance += t.type === 'income' ? -t.amount : t.amount;
         });
-        
         if (LIABILITY_TYPES.includes(account.type as any)) {
           monthLiabilities += balance;
         } else {
@@ -191,62 +163,37 @@ export default function ReportsClientPage({
       
       history.push({
         month: monthStart.toLocaleDateString('default', { month: 'short', year: '2-digit' }),
-        fullDate: monthStart.toLocaleDateString('default', { month: 'long', year: 'numeric' }),
         netWorth: monthAssets - monthLiabilities,
         assets: monthAssets,
         liabilities: monthLiabilities,
-        date: monthStart,
       });
-      
       current.setMonth(current.getMonth() + 1);
     }
 
     return {
-      ...currentNetWorth,
+      netWorth: currentNetWorth.totalAssets - currentNetWorth.totalDebts,
+      totalAssets: currentNetWorth.totalAssets,
+      totalDebts: currentNetWorth.totalDebts,
       netWorthHistory: history,
     };
   }, [accounts, transactions, selectedTimeRange, getTimeRangeDate]);
 
-  // Filter transactions based on selected filters
-  const filteredTransactions = useMemo(() => {
-    let filtered = [...transactions];
-    
-    // Time range filter using accurate date calculation
-    const cutoffDate = getTimeRangeDate(selectedTimeRange);
-    filtered = filtered.filter(t => new Date(t.date) >= cutoffDate);
-    
-    // Category filter
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(t => t.categoryId === selectedCategory);
-    }
-    
-    // Account filter
-    if (selectedAccount !== 'all') {
-      filtered = filtered.filter(t => t.accountId === selectedAccount);
-    }
-    
-    return filtered;
-  }, [transactions, selectedTimeRange, selectedCategory, selectedAccount, getTimeRangeDate]);
-
-  // Calculate income vs expense data with accurate time buckets
+  // Calculate income vs expense data
   const incomeVsExpenseData = useMemo(() => {
     const startDate = getTimeRangeDate(selectedTimeRange);
     const endDate = new Date();
     const monthlyData: { [key: string]: { income: number; expense: number } } = {};
-    
-    // Initialize all months in range
     const current = new Date(startDate);
+
     while (current <= endDate) {
       const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
       monthlyData[monthKey] = { income: 0, expense: 0 };
       current.setMonth(current.getMonth() + 1);
     }
     
-    // Populate with transaction data
     filteredTransactions.forEach(transaction => {
       const date = new Date(transaction.date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
       if (monthlyData[monthKey]) {
         if (transaction.type === 'income') {
           monthlyData[monthKey].income += transaction.amount;
@@ -256,34 +203,35 @@ export default function ReportsClientPage({
       }
     });
 
-    return Object.entries(monthlyData)
-      .map(([monthKey, data]) => {
-        const [year, month] = monthKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-        return {
-          month: getMonthName(parseInt(month)) + ' ' + year.slice(-2),
-          fullDate: date.toLocaleDateString('default', { month: 'long', year: 'numeric' }),
-          date,
-          income: data.income,
-          expense: data.expense,
-          surplus: data.income - data.expense,
-        };
-      })
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    return Object.entries(monthlyData).map(([monthKey, data]) => {
+      const [year, month] = monthKey.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+      return {
+        month: getMonthName(parseInt(month)) + ' ' + year.slice(-2),
+        date,
+        ...data,
+        surplus: data.income - data.expense,
+      };
+    }).sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [filteredTransactions, selectedTimeRange, getTimeRangeDate]);
 
-  // Account flow analysis
+  const overviewMetrics = useMemo(() => {
+    return incomeVsExpenseData.reduce(
+      (acc, data) => {
+        acc.totalIncome += data.income;
+        acc.totalExpense += data.expense;
+        acc.totalSurplus += data.surplus;
+        return acc;
+      },
+      { totalIncome: 0, totalExpense: 0, totalSurplus: 0 }
+    );
+  }, [incomeVsExpenseData]);
+
   const accountFlow = useMemo(() => {
     const accountData: { [accountId: string]: { inflow: number; outflow: number; name: string } } = {};
-    
     accounts.forEach(account => {
-      accountData[account.accountId] = {
-        inflow: 0,
-        outflow: 0,
-        name: account.name,
-      };
+      accountData[account.accountId] = { inflow: 0, outflow: 0, name: account.name };
     });
-    
     filteredTransactions.forEach(transaction => {
       if (accountData[transaction.accountId]) {
         if (transaction.type === 'income') {
@@ -293,30 +241,21 @@ export default function ReportsClientPage({
         }
       }
     });
-
     return Object.entries(accountData)
-      .map(([accountId, data]) => ({
-        accountId,
-        ...data,
-        netFlow: data.inflow - data.outflow,
-      }))
+      .map(([accountId, data]) => ({ accountId, ...data, netFlow: data.inflow - data.outflow }))
       .sort((a, b) => Math.abs(b.netFlow) - Math.abs(a.netFlow));
   }, [accounts, filteredTransactions]);
 
-  // Fetch budget performance data
   const fetchBudgetData = useCallback(async () => {
     setIsLoadingBudgets(true);
     try {
       const startDate = getTimeRangeDate(selectedTimeRange);
       const endDate = new Date();
       const budgets = [];
-      
-      // Fetch monthly budgets for each month in range
       const current = new Date(startDate);
       while (current <= endDate) {
         const year = current.getFullYear();
         const month = current.getMonth() + 1;
-        
         try {
           const response = await fetch(`/api/budgets/monthly-overview?year=${year}&month=${month}`);
           if (response.ok) {
@@ -335,10 +274,8 @@ export default function ReportsClientPage({
         } catch (error) {
           console.error(`Failed to fetch budget for ${year}-${month}:`, error);
         }
-        
         current.setMonth(current.getMonth() + 1);
       }
-      
       setBudgetData(budgets);
     } catch (error) {
       console.error('Failed to fetch budget data:', error);
@@ -348,7 +285,6 @@ export default function ReportsClientPage({
     }
   }, [selectedTimeRange, getTimeRangeDate]);
 
-  // Load budget data when time range changes
   useEffect(() => {
     fetchBudgetData();
   }, [fetchBudgetData]);
@@ -356,14 +292,10 @@ export default function ReportsClientPage({
   const refreshData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [transactionsResponse] = await Promise.all([
-        fetch('/api/transactions'),
+      await Promise.all([
+        fetch('/api/transactions').then(res => res.json()).then(result => setTransactions(result.data || [])),
         fetchBudgetData()
       ]);
-      
-      if (!transactionsResponse.ok) throw new Error('Failed to refresh data');
-      const result = await transactionsResponse.json();
-      setTransactions(result.data || []);
       toast.success('Data refreshed successfully');
     } catch (error) {
       toast.error('Failed to refresh data');
@@ -383,22 +315,17 @@ export default function ReportsClientPage({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b pb-4">
         <div className="flex items-center gap-3">
           <BarChart3 className="h-6 w-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Financial Analytics</h1>
-            <p className="text-muted-foreground text-sm">
-              Insights into your financial performance and trends.
-            </p>
+            <p className="text-muted-foreground text-sm">Insights into your financial performance and trends.</p>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
             <Select value={selectedTimeRange} onValueChange={(value: any) => setSelectedTimeRange(value)}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="3m">Last 3 months</SelectItem>
                 <SelectItem value="6m">Last 6 months</SelectItem>
@@ -406,506 +333,153 @@ export default function ReportsClientPage({
                 <SelectItem value="all">All time</SelectItem>
               </SelectContent>
             </Select>
-            
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9">
-                <SelectValue placeholder="All categories" />
-              </SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px] h-9"><SelectValue placeholder="All categories" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
-                {categories.map(category => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
-                  </SelectItem>
-                ))}
+                {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            
             <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9">
-                <SelectValue placeholder="All accounts" />
-              </SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px] h-9"><SelectValue placeholder="All accounts" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All accounts</SelectItem>
-                {accounts.map(account => (
-                  <SelectItem key={account.accountId} value={account.accountId}>
-                    {account.name}
-                  </SelectItem>
-                ))}
+                {accounts.map(a => <SelectItem key={a.accountId} value={a.accountId}>{a.name}</SelectItem>)}
               </SelectContent>
             </Select>
-
-            <Button 
-              onClick={refreshData} 
-              variant="outline" 
-              size="icon"
-              disabled={isLoading}
-              className="h-9 w-9"
-            >
+            <Button onClick={refreshData} variant="outline" size="icon" disabled={isLoading} className="h-9 w-9">
               <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
             </Button>
-            <Button 
-              variant="outline"
-              size="icon"
-              className="h-9 w-9"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="icon" className="h-9 w-9"><Download className="h-4 w-4" /></Button>
         </div>
       </div>
 
-      {/* Ultra Modern Report Tabs */}
-      <Tabs value={selectedReportType} defaultValue="overview" onValueChange={(value: any) => setSelectedReportType(value)}>
+      <Tabs defaultValue="networth" className="w-full">
         <div className="flex justify-center">
-          <TabsList className="inline-grid w-auto grid-cols-3 bg-muted/50 p-2 rounded-2xl border border-primary/10">
-            <TabsTrigger 
-              value="overview" 
-              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-            >
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Overview
-              </div>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="budget" 
-              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-            >
-              <div className="flex items-center gap-2">
-                <Target className="h-4 w-4" />
-                Budget Performance
-              </div>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="flow" 
-              className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-200 font-medium"
-            >
-              <div className="flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4" />
-                Account Flow
-              </div>
-            </TabsTrigger>
+          <TabsList className="inline-grid w-auto grid-cols-4 bg-muted/50 p-2 rounded-2xl border">
+              <TabsTrigger value="networth"><TrendingUp className="h-4 w-4 mr-2" />Net Worth</TabsTrigger>
+              <TabsTrigger value="income"><BarChart3 className="h-4 w-4 mr-2" />Income vs Expenses</TabsTrigger>
+              <TabsTrigger value="budget"><Target className="h-4 w-4 mr-2" />Budget Metrics</TabsTrigger>
+              <TabsTrigger value="flow"><ArrowRightLeft className="h-4 w-4 mr-2" />Account Flow</TabsTrigger>
           </TabsList>
         </div>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="mt-4">
-          <Carousel className="w-full max-w-4xl mx-auto">
-            <CarouselContent>
-              <CarouselItem>
-                {/* Net Worth Over Time */}
-                <Card className="min-h-[560px] border-2 border-primary/10 bg-gradient-to-br from-background/95 to-primary/5 backdrop-blur-sm shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                      Net Worth Over Time
-                    </CardTitle>
-                    <CardDescription>Track your wealth growth month over month</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6 pt-4">
-                    <ChartContainer config={chartConfig} className="h-[350px]">
-                      <LineChart data={netWorthHistory}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis tickFormatter={formatNumber} />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={3} />
-                        <Line type="monotone" dataKey="assets" stroke="var(--color-assets)" strokeWidth={2} strokeDasharray="5 5" />
-                        <Line type="monotone" dataKey="liabilities" stroke="var(--color-liabilities)" strokeWidth={2} strokeDasharray="5 5" />
-                      </LineChart>
-                    </ChartContainer>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-primary/10">
-                      <div className="rounded-lg border bg-card/50 p-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />
-                          Total Assets
-                        </div>
-                        <p className="text-2xl font-bold mt-1">{formatCurrency(totalAssets)}</p>
-                      </div>
-                      <div className="rounded-lg border bg-card/50 p-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />
-                          Total Liabilities
-                        </div>
-                        <p className="text-2xl font-bold mt-1">{formatCurrency(totalDebts)}</p>
-                      </div>
-                      <div className="rounded-lg border bg-card/50 p-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span className="flex h-2 w-2 shrink-0 rounded-full bg-primary" />
-                          Net Worth
-                        </div>
-                        <p className="text-2xl font-bold mt-1">{formatCurrency(netWorth)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </CarouselItem>
-              <CarouselItem>
-                {/* Income vs Expense */}
-                <Card className="min-h-[560px] border-2 border-primary/10 bg-gradient-to-br from-background/95 to-primary/5 backdrop-blur-sm shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <ArrowRightLeft className="h-5 w-5 text-blue-600" />
-                      Income vs Expense
-                    </CardTitle>
-                    <CardDescription>Monthly cash flow analysis with surplus/deficit tracking</CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <ChartContainer config={chartConfig} className="h-[430px]">
-                      <ComposedChart data={incomeVsExpenseData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis tickFormatter={formatNumber} />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <Bar dataKey="income" fill="var(--color-income)" />
-                        <Bar dataKey="expense" fill="var(--color-expense)" />
-                        <Line type="monotone" dataKey="surplus" stroke="var(--color-surplus)" strokeWidth={3} />
-                      </ComposedChart>
-                    </ChartContainer>
-                  </CardContent>
-                </Card>
-              </CarouselItem>
-            </CarouselContent>
-            <CarouselPrevious className="absolute -left-12 top-1/2 -translate-y-1/2" />
-            <CarouselNext className="absolute -right-12 top-1/2 -translate-y-1/2" />
-          </Carousel>
-        </TabsContent>
-
-        {/* Budget Performance Tab */}
-        <TabsContent value="budget" className="space-y-6">
-          {/* Budget vs Actual Spending Over Time */}
-          <Card>
+        <TabsContent value="networth" className="mt-6">
+          <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                Budget vs Actual Spending
-              </CardTitle>
-              <CardDescription>Track how well you're sticking to your monthly budgets over time</CardDescription>
+              <CardTitle>Net Worth Analytics</CardTitle>
+              <CardDescription>Track your wealth growth month over month</CardDescription>
             </CardHeader>
-            <CardContent>
-              {isLoadingBudgets ? (
-                <div className="flex items-center justify-center h-[400px]">
-                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading budget data...</span>
-                </div>
-              ) : budgetData.length > 0 ? (
-                <ChartContainer config={{
-                  budgeted: { label: 'Budgeted', color: '#0ea5e9' },
-                  spent: { label: 'Spent', color: '#f59e0b' },
-                  variance: { label: 'Variance', color: '#8b5cf6' }
-                }} className="h-[400px]">
-                  <ComposedChart data={budgetData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="monthName" />
+            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+              <div className="lg:col-span-2">
+                <ChartContainer config={chartConfig} className="h-[350px]">
+                  <LineChart data={netWorthHistory}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted) / 0.5)" />
+                    <XAxis dataKey="month" />
                     <YAxis tickFormatter={formatNumber} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="totalBudgeted" fill="var(--color-budgeted)" name="Budgeted" />
-                    <Bar dataKey="totalSpent" fill="var(--color-spent)" name="Spent" />
-                    <Line 
-                      type="monotone" 
-                      dataKey={(data: any) => data.totalSpent - data.totalBudgeted} 
-                      stroke="var(--color-variance)" 
-                      strokeWidth={3} 
-                      name="Over/Under Budget"
-                    />
-                  </ComposedChart>
+                    <Line type="monotone" dataKey="netWorth" stroke="var(--color-netWorth)" strokeWidth={2} />
+                    <Line type="monotone" dataKey="assets" stroke="var(--color-assets)" strokeWidth={1.5} strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="liabilities" stroke="var(--color-liabilities)" strokeWidth={1.5} strokeDasharray="5 5" />
+                  </LineChart>
                 </ChartContainer>
-              ) : (
-                <div className="text-center py-12">
-                  <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No budget data available for the selected time range.</p>
-                  <p className="text-sm text-muted-foreground mt-1">Set up monthly budgets to see performance analysis.</p>
-                </div>
-              )}
+              </div>
+              <div className="lg:col-span-1 space-y-4">
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />Total Assets</div><p className="text-2xl font-bold mt-1">{formatCurrency(totalAssets)}</p></div>
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />Total Liabilities</div><p className="text-2xl font-bold mt-1">{formatCurrency(totalDebts)}</p></div>
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-primary" />Net Worth</div><p className="text-2xl font-bold mt-1">{formatCurrency(netWorth)}</p></div>
+              </div>
             </CardContent>
           </Card>
+        </TabsContent>
 
-          {/* Budget Performance Summary */}
-          {budgetData.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-full bg-blue-600/10">
-                      <Target className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Avg Monthly Budget</p>
-                      <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
-                        {formatCurrency(budgetData.reduce((sum, b) => sum + b.totalBudgeted, 0) / budgetData.length)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-full bg-amber-600/10">
-                      <TrendingUp className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Avg Monthly Spent</p>
-                      <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
-                        {formatCurrency(budgetData.reduce((sum, b) => sum + b.totalSpent, 0) / budgetData.length)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-full bg-purple-600/10">
-                      {(() => {
-                        const avgVariance = budgetData.reduce((sum, b) => sum + (b.totalSpent - b.totalBudgeted), 0) / budgetData.length;
-                        return avgVariance > 0 ? 
-                          <TrendingUp className="h-5 w-5 text-purple-600" /> :
-                          <TrendingDown className="h-5 w-5 text-purple-600" />;
-                      })()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-purple-900 dark:text-purple-100">Avg Variance</p>
-                      <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
-                        {(() => {
-                          const avgVariance = budgetData.reduce((sum, b) => sum + (b.totalSpent - b.totalBudgeted), 0) / budgetData.length;
-                          return (avgVariance >= 0 ? '+' : '') + formatCurrency(Math.abs(avgVariance));
-                        })()}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+        <TabsContent value="income" className="mt-6">
+           <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>Income vs Expense</CardTitle>
+              <CardDescription>Monthly cash flow analysis with surplus/deficit tracking</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+              <div className="lg:col-span-2">
+                <ChartContainer config={chartConfig} className="h-[350px]">
+                  <ComposedChart data={incomeVsExpenseData}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis tickFormatter={formatNumber} /><ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="income" fill="var(--color-income)" /><Bar dataKey="expense" fill="var(--color-expense)" /><Line type="monotone" dataKey="surplus" stroke="var(--color-surplus)" strokeWidth={2} />
+                  </ComposedChart>
+                </ChartContainer>
+              </div>
+              <div className="lg:col-span-1 space-y-4">
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" />Total Income</div><p className="text-2xl font-bold mt-1">{formatCurrency(overviewMetrics.totalIncome)}</p></div>
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500" />Total Expense</div><p className="text-2xl font-bold mt-1">{formatCurrency(overviewMetrics.totalExpense)}</p></div>
+                <div className="p-4 rounded-lg bg-card border"><div className="flex items-center gap-2 text-sm text-muted-foreground"><span className={`flex h-2 w-2 shrink-0 rounded-full ${overviewMetrics.totalSurplus >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`} />Net Flow</div><p className={`text-2xl font-bold mt-1 ${overviewMetrics.totalSurplus >= 0 ? 'text-foreground' : 'text-orange-500'}`}>{formatCurrency(overviewMetrics.totalSurplus)}</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          {/* Monthly Budget Details */}
+        <TabsContent value="budget" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Budget vs Actual Spending</CardTitle><CardDescription>Track how well you're sticking to your monthly budgets</CardDescription></CardHeader>
+            <CardContent>
+              {isLoadingBudgets ? (<div className="flex items-center justify-center h-[400px]"><RefreshCw className="h-8 w-8 animate-spin text-primary" /><span className="ml-2 text-muted-foreground">Loading...</span></div>
+              ) : budgetData.length > 0 ? (
+                <ChartContainer config={{budgeted: {label: 'Budgeted', color: '#0ea5e9'}, spent: {label: 'Spent', color: '#f59e0b'}, variance: {label: 'Variance', color: '#8b5cf6'}}} className="h-[400px]">
+                  <ComposedChart data={budgetData}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="monthName" /><YAxis tickFormatter={formatNumber} /><ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="totalBudgeted" fill="var(--color-budgeted)" name="Budgeted" /><Bar dataKey="totalSpent" fill="var(--color-spent)" name="Spent" />
+                    <Line type="monotone" dataKey={(d: any) => d.totalSpent - d.totalBudgeted} stroke="var(--color-variance)" strokeWidth={3} name="Over/Under" />
+                  </ComposedChart>
+                </ChartContainer>
+              ) : (<div className="text-center py-12"><Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" /><p>No budget data for this period.</p></div>)}
+            </CardContent>
+          </Card>
           {budgetData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Monthly Budget Details</CardTitle>
-                <CardDescription>Detailed breakdown of budget performance by month</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {budgetData.slice(-6).reverse().map((month) => {
-                    const variance = month.totalSpent - month.totalBudgeted;
-                    const percentage = month.totalBudgeted > 0 ? (month.totalSpent / month.totalBudgeted) * 100 : 0;
-                    const isOverBudget = variance > 0;
-                    
-                    return (
-                      <div key={`${month.year}-${month.month}`} className="p-4 rounded-lg border bg-card">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold">{month.fullDate}</h3>
-                          <Badge variant={isOverBudget ? "destructive" : "default"}>
-                            {isOverBudget ? '+' : ''}{formatCurrency(variance)}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Budgeted:</span>
-                            <p className="font-medium">{formatCurrency(month.totalBudgeted)}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Spent:</span>
-                            <p className="font-medium">{formatCurrency(month.totalSpent)}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Performance:</span>
-                            <p className={cn("font-medium", isOverBudget ? "text-destructive" : "text-green-600")}>
-                              {percentage.toFixed(1)}% of budget
-                            </p>
-                          </div>
-                        </div>
-                        <Progress 
-                          value={Math.min(percentage, 100)} 
-                          className="mt-3"
-                        />
+            <Card><CardHeader><CardTitle>Monthly Budget Details</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {budgetData.slice(-6).reverse().map((month) => {
+                  const variance = month.totalSpent - month.totalBudgeted;
+                  const percentage = month.totalBudgeted > 0 ? (month.totalSpent / month.totalBudgeted) * 100 : 0;
+                  return (
+                    <div key={month.monthName} className="p-4 rounded-lg border bg-card">
+                      <div className="flex items-center justify-between mb-3"><h3 className="font-semibold">{month.fullDate}</h3><Badge variant={variance > 0 ? "destructive" : "default"}>{variance > 0 ? '+' : ''}{formatCurrency(variance)}</Badge></div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div><span className="text-muted-foreground">Budgeted:</span><p>{formatCurrency(month.totalBudgeted)}</p></div>
+                        <div><span className="text-muted-foreground">Spent:</span><p>{formatCurrency(month.totalSpent)}</p></div>
+                        <div><span className="text-muted-foreground">Performance:</span><p className={cn(variance > 0 ? "text-destructive" : "text-green-600")}>{percentage.toFixed(1)}%</p></div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <Progress value={Math.min(percentage, 100)} className="mt-3" />
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
-        {/* Account Flow Tab */}
-        <TabsContent value="flow" className="space-y-6">
-          {/* Income Flow Analysis */}
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-950 dark:to-emerald-900 border-green-200 dark:border-green-800">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
-                <ArrowUpRight className="h-5 w-5" />
-                Income Flow Analysis
-              </CardTitle>
-              <CardDescription className="text-green-700 dark:text-green-300">
-                Track where your income is flowing and which accounts are receiving the most money
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {accountFlow
-                  .filter(account => account.inflow > 0)
-                  .sort((a, b) => b.inflow - a.inflow)
-                  .map((account) => {
-                    const inflowPercentage = accountFlow.reduce((sum, acc) => sum + acc.inflow, 0) > 0 ? 
-                      (account.inflow / accountFlow.reduce((sum, acc) => sum + acc.inflow, 0)) * 100 : 0;
-                    
-                    return (
-                      <div key={account.accountId} className="p-4 rounded-xl bg-white/60 dark:bg-black/20 border border-green-200 dark:border-green-700">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 rounded-full bg-green-600/10">
-                            <Wallet className="h-4 w-4 text-green-600" />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-green-900 dark:text-green-100">{account.name}</h3>
-                            <p className="text-xs text-green-700 dark:text-green-300">{inflowPercentage.toFixed(1)}% of total income</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-green-700 dark:text-green-300">Total Inflow</span>
-                            <span className="font-bold text-green-800 dark:text-green-200">{formatCurrency(account.inflow)}</span>
-                          </div>
-                                                  <Progress 
-                          value={inflowPercentage} 
-                          className="h-2 bg-green-100 dark:bg-green-800"
-                        />
-                        </div>
-                      </div>
-                    );
-                  })
-                }
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Complete Account Flow Analysis */}
+        <TabsContent value="flow" className="mt-6 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ArrowRightLeft className="h-5 w-5 text-blue-600" />
-                Complete Account Flow Analysis
-              </CardTitle>
-              <CardDescription>Comprehensive view of money movement across all accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Flow Chart/Bars */}
-                <ChartContainer config={{
-                  inflow: { label: 'Inflow', color: ASSET_COLOR },
-                  outflow: { label: 'Outflow', color: LIABILITY_COLOR },
-                  netFlow: { label: 'Net Flow', color: '#8b5cf6' }
-                }} className="h-[400px]">
-                  <BarChart data={accountFlow} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={formatNumber} />
-                    <YAxis dataKey="name" type="category" width={120} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="inflow" fill="var(--color-inflow)" name="Inflow" />
-                    <Bar dataKey="outflow" fill="var(--color-outflow)" name="Outflow" />
-                  </BarChart>
-                </ChartContainer>
-
-                {/* Detailed Account Cards */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {accountFlow.map((account) => {
-                    const totalFlow = account.inflow + account.outflow;
-                    const isPositiveFlow = account.netFlow >= 0;
-                    
-                    return (
-                      <div 
-                        key={account.accountId} 
-                        className={cn(
-                          "p-6 rounded-xl border-2 transition-all duration-200 hover:shadow-lg",
-                          isPositiveFlow 
-                            ? "bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border-green-200 dark:border-green-800" 
-                            : "bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950 border-red-200 dark:border-red-800"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "p-3 rounded-full",
-                              isPositiveFlow ? "bg-green-600/10" : "bg-red-600/10"
-                            )}>
-                              <Wallet className={cn(
-                                "h-5 w-5",
-                                isPositiveFlow ? "text-green-600" : "text-red-600"
-                              )} />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-lg">{account.name}</h3>
-                              <p className="text-sm text-muted-foreground">
-                                {totalFlow > 0 ? `${((account.inflow / totalFlow) * 100).toFixed(0)}% inflow` : 'No activity'}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge 
-                            variant={isPositiveFlow ? "default" : "destructive"}
-                            className="text-lg px-3 py-1"
-                          >
-                            {isPositiveFlow ? '+' : ''}{formatCurrency(account.netFlow)}
-                          </Badge>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-6">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <ArrowUpRight className="h-4 w-4 text-green-600" />
-                              <span className="text-sm font-medium text-green-700 dark:text-green-300">Income Flow</span>
-                            </div>
-                            <p className="text-2xl font-bold text-green-800 dark:text-green-200">
-                              {formatCurrency(account.inflow)}
-                            </p>
-                            <div className="h-2 bg-green-100 dark:bg-green-800 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-green-600 rounded-full transition-all duration-500"
-                                style={{ 
-                                  width: totalFlow > 0 ? `${(account.inflow / totalFlow) * 100}%` : '0%' 
-                                }}
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <ArrowDownRight className="h-4 w-4 text-red-600" />
-                              <span className="text-sm font-medium text-red-700 dark:text-red-300">Expense Flow</span>
-                            </div>
-                            <p className="text-2xl font-bold text-red-800 dark:text-red-200">
-                              {formatCurrency(account.outflow)}
-                            </p>
-                            <div className="h-2 bg-red-100 dark:bg-red-800 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-red-600 rounded-full transition-all duration-500"
-                                style={{ 
-                                  width: totalFlow > 0 ? `${(account.outflow / totalFlow) * 100}%` : '0%' 
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Account Performance Indicator */}
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Account Performance</span>
-                            <span className={cn(
-                              "font-medium",
-                              isPositiveFlow ? "text-green-600" : "text-red-600"
-                            )}>
-                              {isPositiveFlow ? 'Accumulating' : 'Depleting'}
-                            </span>
-                          </div>
-                        </div>
+            <CardHeader><CardTitle>Account Flow Analysis</CardTitle><CardDescription>View of money movement across all accounts</CardDescription></CardHeader>
+            <CardContent className="space-y-6">
+              <ChartContainer config={{inflow: {label: 'Inflow', color: ASSET_COLOR}, outflow: {label: 'Outflow', color: LIABILITY_COLOR}}} className="h-[400px]">
+                <BarChart data={accountFlow} layout="vertical"><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" tickFormatter={formatNumber} /><YAxis dataKey="name" type="category" width={120} /><ChartTooltip content={<ChartTooltipContent />} /><Bar dataKey="inflow" fill="var(--color-inflow)" name="Inflow" /><Bar dataKey="outflow" fill="var(--color-outflow)" name="Outflow" /></BarChart>
+              </ChartContainer>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {accountFlow.map((account) => {
+                  const totalFlow = account.inflow + account.outflow;
+                  const isPositiveFlow = account.netFlow >= 0;
+                  return (
+                    <div key={account.accountId} className={cn("p-6 rounded-xl border-2", isPositiveFlow ? "bg-green-50 dark:bg-green-950 border-green-200" : "bg-red-50 dark:bg-red-950 border-red-200")}>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3"><div className={cn("p-3 rounded-full", isPositiveFlow ? "bg-green-100" : "bg-red-100")}><Wallet className={cn("h-5 w-5", isPositiveFlow ? "text-green-600" : "text-red-600")} /></div><div><h3 className="font-bold text-lg">{account.name}</h3><p className="text-sm text-muted-foreground">{totalFlow > 0 ? `${((account.inflow / totalFlow) * 100).toFixed(0)}% inflow` : 'No activity'}</p></div></div>
+                        <Badge variant={isPositiveFlow ? "default" : "destructive"}>{isPositiveFlow ? '+' : ''}{formatCurrency(account.netFlow)}</Badge>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2"><div className="flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-green-600" /><span className="text-sm">Income</span></div><p className="text-2xl font-bold">{formatCurrency(account.inflow)}</p><Progress value={totalFlow > 0 ? (account.inflow / totalFlow) * 100 : 0} className="h-2 bg-green-100" /></div>
+                        <div className="space-y-2"><div className="flex items-center gap-2"><ArrowDownRight className="h-4 w-4 text-red-600" /><span className="text-sm">Expense</span></div><p className="text-2xl font-bold">{formatCurrency(account.outflow)}</p><Progress value={totalFlow > 0 ? (account.outflow / totalFlow) * 100 : 0} className="h-2 bg-red-100" /></div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
