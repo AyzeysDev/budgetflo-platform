@@ -233,7 +233,7 @@ export default function ReportsClientPage({
     };
   }, [accounts, transactions, selectedTimeRange, getTimeRangeDate]);
 
-  // Calculate income vs expense data
+  // Calculate income vs expense data (exclude transfers)
   const incomeVsExpenseData = useMemo(() => {
     const startDate = getTimeRangeDate(selectedTimeRange);
     const endDate = new Date();
@@ -246,7 +246,12 @@ export default function ReportsClientPage({
       current.setMonth(current.getMonth() + 1);
     }
     
-    filteredTransactions.forEach(transaction => {
+    // Filter out transfers and only include transactions with categories
+    const categorizedTransactions = filteredTransactions.filter(transaction => 
+      transaction.categoryId && transaction.source !== 'account_transfer'
+    );
+    
+    categorizedTransactions.forEach(transaction => {
       const date = new Date(transaction.date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       if (monthlyData[monthKey]) {
@@ -287,6 +292,7 @@ export default function ReportsClientPage({
     accounts.forEach(account => {
       accountData[account.accountId] = { inflow: 0, outflow: 0, name: account.name };
     });
+    // Account flow should include transfers since it's about money movement between accounts
     filteredTransactions.forEach(transaction => {
       if (accountData[transaction.accountId]) {
         if (transaction.type === 'income') {
@@ -308,11 +314,16 @@ export default function ReportsClientPage({
       const endDate = new Date();
       const budgets = [];
       const current = new Date(startDate);
+      // Add cache-busting timestamp to ensure fresh data
+      const cacheBuster = Date.now();
+      
       while (current <= endDate) {
         const year = current.getFullYear();
         const month = current.getMonth() + 1;
         try {
-          const response = await fetch(`/api/budgets/monthly-overview?year=${year}&month=${month}`);
+          const response = await fetch(`/api/budgets/monthly-overview?year=${year}&month=${month}&_t=${cacheBuster}`, {
+            cache: 'no-store'
+          });
           if (response.ok) {
             const result = await response.json();
             if (result.data) {
@@ -348,7 +359,7 @@ export default function ReportsClientPage({
     setIsLoading(true);
     try {
       await Promise.all([
-        fetch('/api/transactions').then(res => res.json()).then(result => setTransactions(result.data || [])),
+        fetch('/api/transactions', { cache: 'no-store' }).then(res => res.json()).then(result => setTransactions(result.data || [])),
         fetchBudgetData()
       ]);
       toast.success('Data refreshed successfully');
